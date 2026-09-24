@@ -1,5 +1,3 @@
-
-
-#TODO
+# TODO
 def get_db():
-    return 
+    return

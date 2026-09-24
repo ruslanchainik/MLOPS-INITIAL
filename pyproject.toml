@@ -35,7 +35,7 @@ package-mode = false
 
 
 [tool.ruff]
-line-length = 100 
+line-length = 100
 target-version = "py314"
 src = ["src"]
 
@@ -45,7 +45,7 @@ select = [
     "F",
     "I",
     "UP",
-    "B",    
+    "B",
     "ASYNC",
     "SIM",
     "RUF",
