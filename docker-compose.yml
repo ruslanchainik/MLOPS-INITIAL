@@ -1,0 +1,63 @@
+services:
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:${APP_PORT:-8001}:8000"
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).close()"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    cpus: 1.0
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - backend
+
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    cpus: 1.0
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - backend
+
+volumes:
+  postgres_data:
+
+networks:
+  backend:
