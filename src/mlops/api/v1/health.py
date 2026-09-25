@@ -1,32 +1,32 @@
+import asyncio
 import logging
-from time import perf_counter
+import time
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from mlops import __version__
 from mlops.db.session import get_db
+
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+DB_CHECK_TIMEOUT = 3
 
-@router.get("/health")
-async def health(
-    db: AsyncSession = Depends(get_db),
-):
-    start = perf_counter()
+
+async def check_postgres(db: AsyncSession) -> dict:
+    start = time.perf_counter()
 
     try:
-        result = await db.execute(text("SELECT version()"))
+        async with asyncio.timeout(DB_CHECK_TIMEOUT):
+            result = await db.execute(text("SELECT version()"))
+            pg_version = result.scalar_one()
 
-        postgres_version = result.scalar_one()
-
-        response_time_ms = round(
-            (perf_counter() - start) * 1000,
-            2,
-        )
+        elapsed = time.perf_counter() - start
+        response_time_ms = round(elapsed * 1000, 2)
 
         logger.info(
             "PostgreSQL health check passed response_time_ms=%s",
@@ -34,39 +34,50 @@ async def health(
         )
 
         return {
-            "status": "ok",
-            "components": [
-                {
-                    "name": "postgresql",
-                    "status": "up",
-                    "version": postgres_version,
-                    "response_time_ms": response_time_ms,
-                }
-            ],
+            "name": "postgresql",
+            "status": "up",
+            "version": pg_version,
+            "response_time_ms": response_time_ms,
         }
 
-    except Exception:
-        response_time_ms = round(
-            (perf_counter() - start) * 1000,
-            2,
+    except Exception as error:
+        elapsed = time.perf_counter() - start
+        response_time_ms = round(elapsed * 1000, 2)
+
+        error_message = (
+            "Database check timed out"
+            if isinstance(error, TimeoutError)
+            else "Database unavailable"
         )
 
-        logger.exception(
-            "PostgreSQL health check failed response_time_ms=%s",
+        logger.warning(
+            "PostgreSQL health check failed error=%s response_time_ms=%s",
+            error_message,
             response_time_ms,
         )
 
-        return JSONResponse(
-            status_code=503,
-            content={
-                "status": "degraded",
-                "components": [
-                    {
-                        "name": "postgresql",
-                        "status": "down",
-                        "version": None,
-                        "response_time_ms": response_time_ms,
-                    }
-                ],
-            },
-        )
+        return {
+            "name": "postgresql",
+            "status": "down",
+            "error": error_message,
+            "response_time_ms": response_time_ms,
+        }
+
+
+@router.get("/health")
+async def health_check(
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    check = [await check_postgres(db)]
+
+    status = (
+        "ok"
+        if all(component["status"] == "up" for component in check)
+        else "degraded"
+    )
+
+    return {
+        "status": status,
+        "components": check,
+        "app_version": __version__,
+    }

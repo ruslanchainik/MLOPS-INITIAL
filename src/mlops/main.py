@@ -3,11 +3,13 @@ from contextlib import asynccontextmanager
 from time import perf_counter
 
 from fastapi import FastAPI, Request
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from mlops.api.healthz import router as healthz_router
 from mlops.api.v1.router import router as v1_router
 from mlops.core.logging import configure_logging
-from mlops.db.session import close_db
+from mlops.db.session import create_db_engine
+
 
 configure_logging()
 
@@ -16,19 +18,23 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    engine = create_db_engine()
+
+    app.state.session_factory = async_sessionmaker(
+        engine,
+        expire_on_commit=False,
+    )
+
     logger.info("Application started")
 
-    yield
+    try:
+        yield
+    finally:
+        await engine.dispose()
+        logger.info("Application stopped")
 
-    await close_db()
 
-    logger.info("Application stopped")
-
-
-app = FastAPI(
-    title="MLOps",
-    lifespan=lifespan,
-)
+app = FastAPI(lifespan=lifespan)
 
 
 @app.middleware("http")
