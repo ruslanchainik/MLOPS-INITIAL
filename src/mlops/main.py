@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
         expire_on_commit=False,
     )
 
-    logger.info("Application started")
+    logger.info("Приложение запущено")
 
     try:
         yield
