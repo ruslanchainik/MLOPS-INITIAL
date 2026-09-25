@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from mlops import __version__
 from mlops.db.session import get_db
 
-
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -70,11 +69,7 @@ async def health_check(
 ):
     check = [await check_postgres(db)]
 
-    status = (
-        "ok"
-        if all(component["status"] == "up" for component in check)
-        else "degraded"
-    )
+    status = "ok" if all(component["status"] == "up" for component in check) else "degraded"
 
     return {
         "status": status,

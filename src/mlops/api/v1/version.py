@@ -8,4 +8,3 @@ router = APIRouter()
 @router.get("/version")
 async def get_version():
     return {"version": __version__}
-

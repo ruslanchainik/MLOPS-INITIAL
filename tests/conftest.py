@@ -1,3 +1,4 @@
+import os
 from unittest.mock import AsyncMock
 
 import pytest
@@ -6,6 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from mlops.db.session import get_db
 from mlops.main import app
+
+for name, value in {
+    "DB_HOST": "127.0.0.1",
+    "DB_PORT": "5432",
+    "POSTGRES_DB": "test",
+    "POSTGRES_USER": "test",
+    "POSTGRES_PASSWORD": "test",
+}.items():
+    os.environ.setdefault(name, value)
 
 
 @pytest.fixture

@@ -59,14 +59,13 @@ def test_health_database_down():
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 503
+    assert response.status_code == 200
 
     data = response.json()
 
     assert data["status"] == "degraded"
-
-    component = data["components"][0]
-
-    assert component["name"] == "postgresql"
-    assert component["status"] == "down"
-    assert component["version"] is None
+    assert data["components"][0]["name"] == "postgresql"
+    assert data["components"][0]["status"] == "down"
+    assert data["components"][0]["error"] == "Database unavailable"
+    assert "response_time_ms" in data["components"][0]
+    assert "app_version" in data

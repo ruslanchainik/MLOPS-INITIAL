@@ -10,7 +10,6 @@ from mlops.api.v1.router import router as v1_router
 from mlops.core.logging import configure_logging
 from mlops.db.session import create_db_engine
 
-
 configure_logging()
 
 logger = logging.getLogger(__name__)
