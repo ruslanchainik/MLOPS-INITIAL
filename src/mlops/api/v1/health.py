@@ -1,3 +1,4 @@
+import logging
 from time import perf_counter
 
 from fastapi import APIRouter, Depends
@@ -8,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from mlops.db.session import get_db
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/health")
@@ -18,11 +20,17 @@ async def health(
 
     try:
         result = await db.execute(text("SELECT version()"))
+
         postgres_version = result.scalar_one()
 
         response_time_ms = round(
             (perf_counter() - start) * 1000,
             2,
+        )
+
+        logger.info(
+            "PostgreSQL health check passed response_time_ms=%s",
+            response_time_ms,
         )
 
         return {
@@ -41,6 +49,11 @@ async def health(
         response_time_ms = round(
             (perf_counter() - start) * 1000,
             2,
+        )
+
+        logger.exception(
+            "PostgreSQL health check failed response_time_ms=%s",
+            response_time_ms,
         )
 
         return JSONResponse(
