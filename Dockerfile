@@ -2,7 +2,6 @@ FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app/src \
     POETRY_VIRTUALENVS_CREATE=false
 
 WORKDIR /app
@@ -15,6 +14,7 @@ RUN poetry --no-cache install --only main,web --no-root --no-interaction --no-an
 
 RUN useradd --create-home --uid 10001 app
 COPY src/ ./src/
+RUN poetry install --only-root --no-interaction --no-ansi
 
 USER app
 EXPOSE 8000
