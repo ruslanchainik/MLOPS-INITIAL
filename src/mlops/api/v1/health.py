@@ -1,37 +1,59 @@
-import time
+from time import perf_counter
+
 from fastapi import APIRouter, Depends
-from importlib.metadata import version as pkg_version
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from mlops.db.session import get_db
 
 router = APIRouter()
 
-async def check_postgres(db: AsyncSession) -> dict:
-    start = time.perf_counter()
-    try:
-        result = await db.execute(text("Select version()"))
-        pg_version = result.scalar_one()
-        elapsed = time.perf_counter() - start
-        return {"name": "postgresql",
-                "status": "up",
-                "version": pg_version,
-                "response_time_ms": round(elapsed * 1000, 2)}
-    except Exception as e:
-        elapsed = time.perf_counter() - start
-        return {"name": "postgresql",
-                "status": "down",
-                "error": str(e),
-                "response_time_ms": round(elapsed * 1000, 2)}
 
 @router.get("/health")
-async def health_check(db: AsyncSession = Depends(get_db)):
-    check = [await check_postgres(db)]
+async def health(
+    db: AsyncSession = Depends(get_db),
+):
+    start = perf_counter()
 
-    status = "ok" if all(c["status"] == "up" for c in check) else "degraded"
+    try:
+        result = await db.execute(text("SELECT version()"))
+        postgres_version = result.scalar_one()
 
-    return {"status": status,
-            "components": check,
-            "app_version": pkg_version("mlops")}
+        response_time_ms = round(
+            (perf_counter() - start) * 1000,
+            2,
+        )
 
+        return {
+            "status": "ok",
+            "components": [
+                {
+                    "name": "postgresql",
+                    "status": "up",
+                    "version": postgres_version,
+                    "response_time_ms": response_time_ms,
+                }
+            ],
+        }
 
+    except Exception:
+        response_time_ms = round(
+            (perf_counter() - start) * 1000,
+            2,
+        )
+
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "degraded",
+                "components": [
+                    {
+                        "name": "postgresql",
+                        "status": "down",
+                        "version": None,
+                        "response_time_ms": response_time_ms,
+                    }
+                ],
+            },
+        )
