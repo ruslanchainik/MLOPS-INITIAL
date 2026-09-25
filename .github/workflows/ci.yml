@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_DB: mlops_test
+          POSTGRES_USER: mlops_test
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mlops_test -d mlops_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      POSTGRES_DB: mlops_test
+      POSTGRES_USER: mlops_test
+      POSTGRES_PASSWORD: test_password
+      RUN_DB_TESTS: "1"
+      TEST_BASE_URL: http://127.0.0.1:8000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install Poetry
+        run: python -m pip install poetry==2.4.3
+
+      - name: Install dependencies
+        run: poetry install --with web,dev --no-interaction
+
+      - name: Lint
+        run: poetry run ruff check .
+
+      - name: Check formatting
+        run: poetry run ruff format --check .
+
+      - name: Start application
+        run: |
+          poetry run uvicorn mlops.main:app --host 127.0.0.1 --port 8000 > /tmp/mlops-app.log 2>&1 &
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8000/healthz > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/mlops-app.log
+          exit 1
+
+      - name: Test with coverage
+        run: poetry run pytest --cov --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          if-no-files-found: ignore
