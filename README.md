@@ -77,6 +77,12 @@ Returns HTTP 200 with `"status": "degraded"` and `"status": "down"` on the compo
 | `POSTGRES_USER` | yes | — | application, database |
 | `POSTGRES_PASSWORD` | yes | — | application, database |
 | `APP_PORT` | no | `8001` | Docker Compose host port |
+| `MLFLOW_DB_NAME` | yes | — | MLflow backend store |
+| `MLFLOW_DB_USER` | yes | — | MLflow backend store |
+| `MLFLOW_DB_PASSWORD` | yes | — | MLflow backend store |
+| `S3_ACCESS_KEY` | yes | — | RustFS, MLflow server |
+| `S3_SECRET_KEY` | yes | — | RustFS, MLflow server |
+| `MLFLOW_BUCKET` | yes | — | MLflow artifact bucket |
 
 The application reads these from the process environment. `.env` is consumed by Docker Compose, not loaded by the application itself.
 
@@ -104,6 +110,51 @@ Stop and delete database volume:
 ```bash
 docker compose down -v
 ```
+
+## MLflow
+
+`docker compose up` also starts an MLflow Tracking Server with separate stores:
+
+| Service | Role | Address |
+|---|---|---|
+| `mlflow` | Tracking server and UI | `http://127.0.0.1:5000` |
+| `mlflow-db` | Backend store (PostgreSQL 17): experiments, runs, params, metrics, dataset records | internal |
+| `rustfs` | Artifact store (S3-compatible): plots, tables, models | console at `http://127.0.0.1:9001/rustfs/console/` |
+| `bucket-init` | One-off job that creates the artifact bucket | exits with code 0 |
+
+The server runs with `--artifacts-destination`, so it proxies artifacts: clients need only `MLFLOW_TRACKING_URI`, and the S3 keys stay inside the server container. The `mlflow` image is built from `docker/mlflow/Dockerfile`, which adds the PostgreSQL and S3 drivers to the official image.
+
+To download artifacts from the host, set `MLFLOW_ENABLE_PROXY_MULTIPART_DOWNLOAD=false`. Otherwise the client asks for presigned URLs, which point at `rustfs:9000` and resolve only inside the compose network. Uploads and the UI are not affected.
+
+### Dataset
+
+[MultiFC](https://huggingface.co/datasets/pszemraj/multi_fc) (claim verification, 26 fact-checking sites). The files are not committed; download them into `data/multi_fc/`:
+
+```bash
+mkdir -p data/multi_fc
+for split in train dev test; do
+  curl -L -o data/multi_fc/$split.csv     https://huggingface.co/datasets/pszemraj/multi_fc/resolve/210f476c07dd5f486a9a51311e193a51c1ff8aec/$split.csv
+done
+```
+
+### EDA and dataset tracking
+
+```bash
+poetry install --with ml
+poetry run python experiments/eda.py
+```
+
+The script creates a run in the `multi_fc_eda` experiment and:
+
+- registers the three splits with `mlflow.data.from_pandas` and links them to the run with `mlflow.log_input`;
+- logs plots, tables and `summary.md` under the `eda/` artifact path;
+- logs dataset statistics as metrics and the SHA-256 of each file as a param.
+
+Dataset record fields:
+
+- **source** — the Hugging Face URL pinned to a commit, so it always resolves to the same bytes.
+- **digest** — MLflow's fingerprint of the DataFrame. For pandas it hashes the first 10 000 rows of the fully populated string and numeric columns, plus the row count and column names. It is not a checksum of the whole file, which is why the file SHA-256 is logged as well.
+- **lineage** — the dataset-to-run link created by `log_input`. Runs that used a given dataset version can be found with `mlflow.search_runs(filter_string="dataset.name = 'multi_fc_train' AND dataset.digest = '<digest>'")`.
 
 ## Run locally
 
@@ -185,7 +236,7 @@ Hooks run `ruff check --fix`, `ruff format`, trailing whitespace, end-of-file, Y
 
 ## Dependency management
 
-Dependencies are declared in `pyproject.toml` under `[dependency-groups]` (`web` for runtime, `dev` for tooling) and pinned in `poetry.lock`.
+Dependencies are declared in `pyproject.toml` under `[dependency-groups]` (`web` for runtime, `dev` for tooling, `ml` for experiments) and pinned in `poetry.lock`.
 
 ```bash
 poetry add --group web <package>
