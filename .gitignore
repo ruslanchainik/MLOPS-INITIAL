@@ -19,3 +19,6 @@ dist/
 .coverage.*
 htmlcov/
 coverage.xml
+
+# Datasets
+data/
