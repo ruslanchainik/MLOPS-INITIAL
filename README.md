@@ -156,6 +156,21 @@ Dataset record fields:
 - **digest** — MLflow's fingerprint of the DataFrame. For pandas it hashes the first 10 000 rows of the fully populated string and numeric columns, plus the row count and column names. It is not a checksum of the whole file, which is why the file SHA-256 is logged as well.
 - **lineage** — the dataset-to-run link created by `log_input`. Runs that used a given dataset version can be found with `mlflow.search_runs(filter_string="dataset.name = 'multi_fc_train' AND dataset.digest = '<digest>'")`.
 
+### Second dataset: Webis-Clickbait-17
+
+[Webis Clickbait Corpus 2017](https://zenodo.org/records/5530410) (CC BY 4.0): 19 538 news posts from Twitter, each rated by 5 judges as clickbait or not. Download `clickbait17-train-170630.zip` from Zenodo and extract only the two JSONL files; the `media/` folder (910 MB of images) is not needed:
+
+```bash
+mkdir -p data/clickbait17
+unzip -j clickbait17-train-170630.zip   clickbait17-validation-170630/instances.jsonl   clickbait17-validation-170630/truth.jsonl   -d data/clickbait17
+```
+
+```bash
+poetry run python experiments/eda_clickbait.py
+```
+
+The run goes to the `clickbait17_eda` experiment. The dataset is registered as `clickbait17_train` with the Zenodo archive URL as source; the archive MD5 and the SHA-256 of both JSONL files are logged as params.
+
 ## Run locally
 
 Requires Python 3.14, Poetry 2.4.3 and a reachable PostgreSQL instance.
