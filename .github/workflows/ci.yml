@@ -7,6 +7,7 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     services:
       postgres:
@@ -30,7 +31,13 @@ jobs:
       POSTGRES_USER: mlops_test
       POSTGRES_PASSWORD: test_password
       RUN_DB_TESTS: "1"
+      RUN_MODEL_TESTS: "1"
       TEST_BASE_URL: http://127.0.0.1:8000
+      MLFLOW_TRACKING_URI: http://127.0.0.1:5000
+      MLFLOW_MODEL_NAME: claim-veracity
+      MLFLOW_MODEL_ALIAS: champion
+      TEST_MODEL_VERSION: "1"
+      TEST_MODEL_PREDICTION: "false"
 
     steps:
       - uses: actions/checkout@v4
@@ -43,7 +50,7 @@ jobs:
         run: python -m pip install poetry==2.4.3
 
       - name: Install dependencies
-        run: poetry install --with web,dev --no-interaction
+        run: poetry install --with web,dev,ml --no-interaction
 
       - name: Lint
         run: poetry run ruff check .
@@ -51,16 +58,38 @@ jobs:
       - name: Check formatting
         run: poetry run ruff format --check .
 
-      - name: Start application
+      - name: Start isolated MLflow
         run: |
-          poetry run uvicorn mlops.main:app --host 127.0.0.1 --port 8000 > /tmp/mlops-app.log 2>&1 &
-          for attempt in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:8000/healthz > /dev/null; then
+          poetry run mlflow server \
+            --host 127.0.0.1 \
+            --port 5000 \
+            --workers 1 \
+            --backend-store-uri "sqlite:///${RUNNER_TEMP}/mlflow.db" \
+            --artifacts-destination "${RUNNER_TEMP}/mlflow-artifacts" \
+            --allowed-hosts "127.0.0.1:5000,localhost:5000" \
+            > "$RUNNER_TEMP/mlflow.log" 2>&1 &
+          for attempt in {1..60}; do
+            if curl --fail --silent --max-time 2 "$MLFLOW_TRACKING_URI/health" > /dev/null; then
               exit 0
             fi
             sleep 1
           done
-          cat /tmp/mlops-app.log
+          cat "$RUNNER_TEMP/mlflow.log"
+          exit 1
+
+      - name: Register CI model
+        run: poetry run python tests/register_ci_model.py
+
+      - name: Start application
+        run: |
+          poetry run uvicorn mlops.main:app --host 127.0.0.1 --port 8000 > "$RUNNER_TEMP/mlops-app.log" 2>&1 &
+          for attempt in {1..60}; do
+            if curl --fail --silent --max-time 2 "$TEST_BASE_URL/healthz" > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/mlops-app.log"
           exit 1
 
       - name: Test with coverage
@@ -72,4 +101,23 @@ jobs:
         with:
           name: coverage-report
           path: coverage.xml
+          if-no-files-found: ignore
+
+      - name: Show service logs on failure
+        if: failure()
+        run: |
+          for log in "$RUNNER_TEMP/mlflow.log" "$RUNNER_TEMP/mlops-app.log"; do
+            if [ -f "$log" ]; then
+              cat "$log"
+            fi
+          done
+
+      - name: Upload service logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-logs
+          path: |
+            ${{ runner.temp }}/mlflow.log
+            ${{ runner.temp }}/mlops-app.log
           if-no-files-found: ignore

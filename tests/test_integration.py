@@ -39,5 +39,9 @@ async def test_running_app_predicts_with_registered_model():
     assert response.status_code == 200, f"{response.url}: {response.status_code} {response.text}"
     body = response.json()
     assert body["prediction"] in {"true", "false"}
-    assert body["model_name"] == "claim-veracity"
+    assert body["model_name"] == os.environ.get("MLFLOW_MODEL_NAME", "claim-veracity")
     assert body["model_version"].isdigit()
+    if expected_version := os.environ.get("TEST_MODEL_VERSION"):
+        assert body["model_version"] == expected_version
+    if expected_prediction := os.environ.get("TEST_MODEL_PREDICTION"):
+        assert body["prediction"] == expected_prediction
