@@ -28,6 +28,8 @@ async def lifespan(app: FastAPI):
         expire_on_commit=False,
     )
 
+    logger.info("Приложение запущено")
+
     try:
         app.state.loaded_model = await run_in_threadpool(load_registered_model, Settings())
         logger.info("Application started")
