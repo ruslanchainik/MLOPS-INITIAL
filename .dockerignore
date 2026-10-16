@@ -1,5 +1,8 @@
 .git/
 .venv/
+.poetry-cache/
+poetry.toml
+.tmp/
 .vscode/
 **/__pycache__/
 **/*.py[cod]
