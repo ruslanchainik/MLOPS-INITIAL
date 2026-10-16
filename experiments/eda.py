@@ -22,7 +22,6 @@ from matplotlib.figure import Figure
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "multi_fc"
 SPLITS = ("train", "dev", "test")
 
-# Pinned commit of the Hugging Face repo, so the source always points at the same bytes.
 HF_REPO = "pszemraj/multi_fc"
 HF_REVISION = "210f476c07dd5f486a9a51311e193a51c1ff8aec"
 HF_URL = "https://huggingface.co/datasets/{repo}/resolve/{revision}/{split}.csv"
@@ -38,9 +37,9 @@ GRID_COLOR = "#d9d9d9"
 
 
 def load_split(split: str) -> pd.DataFrame:
-    # Fields that could not be crawled are stored as the literal string "None".
+    # Uncrawled fields are stored as the string "None".
     df = pd.read_csv(DATA_DIR / f"{split}.csv", na_values=["None"])
-    # claimID looks like "pomt-03627": the prefix is the fact-checking site.
+    # claimID prefix is the fact-checking site, e.g. "pomt-03627".
     df["site"] = df["claimID"].str.split("-").str[0]
     return df
 
@@ -61,7 +60,6 @@ def log_datasets(frames: dict[str, pd.DataFrame]) -> dict[str, str]:
             df.drop(columns="site"),
             source=HF_URL.format(repo=HF_REPO, revision=HF_REVISION, split=split),
             name=f"multi_fc_{split}",
-            # Test labels were never published, so the test split has no target.
             targets="label" if split != "test" else None,
         )
         mlflow.log_input(dataset, context="eda", tags={"split": split})
@@ -110,10 +108,8 @@ def plot_label_by_site(train: pd.DataFrame) -> Figure:
     sites = train["site"].value_counts().head(TOP_SITES).index
     labels = train["label"].value_counts().head(HEATMAP_LABELS).index
     subset = train[train["site"].isin(sites)]
-    # Share of each label inside a site: rows sum to at most 1.
     share = pd.crosstab(subset["site"], subset["label"], normalize="index")
     share = share.reindex(index=sites, columns=labels, fill_value=0)
-    # Everything outside the global top labels, so that every row sums to 100%.
     share["other labels"] = 1 - share.sum(axis=1)
     labels = share.columns
 
