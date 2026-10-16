@@ -9,8 +9,13 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_MODEL_NAME: ${MLFLOW_MODEL_NAME:-claim-veracity}
+      MLFLOW_MODEL_ALIAS: ${MLFLOW_MODEL_ALIAS:-champion}
     depends_on:
       db:
+        condition: service_healthy
+      mlflow:
         condition: service_healthy
     healthcheck:
       test:
@@ -23,7 +28,7 @@ services:
       retries: 3
       start_period: 10s
     cpus: 1.0
-    mem_limit: 512m
+    mem_limit: 2g
     logging:
       driver: json-file
       options:
@@ -56,8 +61,112 @@ services:
     networks:
       - backend
 
+  mlflow-db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: ${MLFLOW_DB_NAME:?Set MLFLOW_DB_NAME in .env}
+      POSTGRES_USER: ${MLFLOW_DB_USER:?Set MLFLOW_DB_USER in .env}
+      POSTGRES_PASSWORD: ${MLFLOW_DB_PASSWORD:?Set MLFLOW_DB_PASSWORD in .env}
+    volumes:
+      - mlflow_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - backend
+
+  rustfs:
+    image: rustfs/rustfs:1.0.1
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:?Set S3_ACCESS_KEY in .env}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:?Set S3_SECRET_KEY in .env}
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports:
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - rustfs_data:/data
+    healthcheck:
+      test: [CMD, curl, -fsS, "http://127.0.0.1:9000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - backend
+
+  bucket-init:
+    build:
+      context: ./docker/mlflow
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: http://rustfs:9000
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:?Set S3_ACCESS_KEY in .env}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?Set S3_SECRET_KEY in .env}
+      AWS_DEFAULT_REGION: us-east-1
+      MLFLOW_BUCKET: ${MLFLOW_BUCKET:?Set MLFLOW_BUCKET in .env}
+    entrypoint:
+      - python
+      - -c
+      - |
+        import os
+        import boto3
+        from botocore.exceptions import ClientError
+
+        s3 = boto3.client("s3", endpoint_url=os.environ["MLFLOW_S3_ENDPOINT_URL"])
+        bucket = os.environ["MLFLOW_BUCKET"]
+        try:
+            s3.head_bucket(Bucket=bucket)
+            print(f"bucket {bucket} already exists")
+        except ClientError:
+            s3.create_bucket(Bucket=bucket)
+            print(f"bucket {bucket} created")
+    networks:
+      - backend
+
+  mlflow:
+    build:
+      context: ./docker/mlflow
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri postgresql://${MLFLOW_DB_USER}:${MLFLOW_DB_PASSWORD}@mlflow-db:5432/${MLFLOW_DB_NAME}
+      --artifacts-destination s3://${MLFLOW_BUCKET}/
+    environment:
+      MLFLOW_SERVER_ALLOWED_HOSTS: "mlflow:5000,127.0.0.1:5000,localhost:5000"
+      MLFLOW_S3_ENDPOINT_URL: http://rustfs:9000
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:?Set S3_ACCESS_KEY in .env}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?Set S3_SECRET_KEY in .env}
+      AWS_DEFAULT_REGION: us-east-1
+    ports:
+      - "127.0.0.1:5000:5000"
+    depends_on:
+      mlflow-db:
+        condition: service_healthy
+      bucket-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=3).close()"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - backend
+
 volumes:
   postgres_data:
+  mlflow_db_data:
+  rustfs_data:
 
 networks:
   backend:
