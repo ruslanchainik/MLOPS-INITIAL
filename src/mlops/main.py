@@ -3,12 +3,16 @@ from contextlib import asynccontextmanager
 from time import perf_counter
 
 from fastapi import FastAPI, Request
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from mlops.api.healthz import router as healthz_router
+from mlops.api.process import router as process_router
 from mlops.api.v1.router import router as v1_router
+from mlops.config import Settings
 from mlops.core.logging import configure_logging
 from mlops.db.session import create_db_engine
+from mlops.model import load_registered_model
 
 configure_logging()
 
@@ -24,11 +28,12 @@ async def lifespan(app: FastAPI):
         expire_on_commit=False,
     )
 
-    logger.info("Application started")
-
     try:
+        app.state.loaded_model = await run_in_threadpool(load_registered_model, Settings())
+        logger.info("Application started")
         yield
     finally:
+        app.state.loaded_model = None
         await engine.dispose()
         logger.info("Application stopped")
 
@@ -62,4 +67,5 @@ async def log_requests(
 
 
 app.include_router(healthz_router)
+app.include_router(process_router)
 app.include_router(v1_router)

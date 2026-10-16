@@ -24,3 +24,20 @@ async def test_running_app_checks_real_postgres():
     assert component["status"] == "up"
     assert component["version"].startswith("PostgreSQL ")
     assert component["response_time_ms"] >= 0
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.environ.get("RUN_MODEL_TESTS") != "1",
+    reason="Requires running app and a registered champion model",
+)
+async def test_running_app_predicts_with_registered_model():
+    base_url = os.environ.get("TEST_BASE_URL", "http://127.0.0.1:8001")
+    async with AsyncClient(base_url=base_url, timeout=30, trust_env=False) as client:
+        response = await client.post("/process", json={"text": "The Earth is flat."})
+
+    assert response.status_code == 200, f"{response.url}: {response.status_code} {response.text}"
+    body = response.json()
+    assert body["prediction"] in {"true", "false"}
+    assert body["model_name"] == "claim-veracity"
+    assert body["model_version"].isdigit()
