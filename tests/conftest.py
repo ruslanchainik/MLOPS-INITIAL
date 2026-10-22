@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from mlops.db.session import get_db
 from mlops.main import app
-from mlops.model import LoadedModel
 
 for name, value in {
     "DB_HOST": "127.0.0.1",
@@ -20,16 +19,16 @@ for name, value in {
 
 
 @pytest.fixture(autouse=True)
-def mock_registered_model(monkeypatch):
-    """Keep the existing API tests independent of a real Registry."""
+def mock_services(monkeypatch):
     from mlops import main
 
     monkeypatch.setenv("MLFLOW_TRACKING_URI", "http://mlflow.test:5000")
-    model = Mock()
-    model.predict.return_value = ["false"]
-    loader = Mock(return_value=LoadedModel(model=model, name="claim-veracity", version="2"))
-    monkeypatch.setattr(main, "load_registered_model", loader)
-    return loader
+    monkeypatch.setattr(main, "initialize_database", AsyncMock())
+    publisher = Mock(publish_once=AsyncMock())
+    context = AsyncMock()
+    context.__aenter__.return_value = publisher
+    monkeypatch.setattr(main, "RabbitPublisher", Mock(return_value=context))
+    return publisher
 
 
 @pytest.fixture

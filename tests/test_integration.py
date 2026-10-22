@@ -1,7 +1,12 @@
+import asyncio
 import os
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
+
+from mlops.db import task_results
+from mlops.db.session import create_db_engine
 
 
 @pytest.mark.integration
@@ -34,10 +39,31 @@ async def test_running_app_checks_real_postgres():
 async def test_running_app_predicts_with_registered_model():
     base_url = os.environ.get("TEST_BASE_URL", "http://127.0.0.1:8001")
     async with AsyncClient(base_url=base_url, timeout=30, trust_env=False) as client:
-        response = await client.post("/process", json={"text": "The Earth is flat."})
+        response = await client.post("/api/v1/tasks", json={"text": "The Earth is flat."})
 
-    assert response.status_code == 200, f"{response.url}: {response.status_code} {response.text}"
-    body = response.json()
+    assert response.status_code == 202, response.text
+    engine = create_db_engine()
+    try:
+        async with asyncio.timeout(30):
+            while True:
+                async with engine.connect() as connection:
+                    result = (
+                        (
+                            await connection.execute(
+                                select(task_results).where(
+                                    task_results.c.task_id == response.json()["task_id"]
+                                )
+                            )
+                        )
+                        .mappings()
+                        .first()
+                    )
+                if result:
+                    body = dict(result)
+                    break
+                await asyncio.sleep(0.1)
+    finally:
+        await engine.dispose()
     assert body["prediction"] in {"true", "false"}
     assert body["model_name"] == os.environ.get("MLFLOW_MODEL_NAME", "claim-veracity")
     assert body["model_version"].isdigit()

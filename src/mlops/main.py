@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 from time import perf_counter
 
 from fastapi import FastAPI, Request
-from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from mlops.api.healthz import router as healthz_router
@@ -11,8 +10,8 @@ from mlops.api.process import router as process_router
 from mlops.api.v1.router import router as v1_router
 from mlops.config import Settings
 from mlops.core.logging import configure_logging
-from mlops.db.session import create_db_engine
-from mlops.model import load_registered_model
+from mlops.db.session import create_db_engine, initialize_database
+from mlops.producer.publisher import QueueConfig, RabbitPublisher
 
 configure_logging()
 
@@ -31,11 +30,17 @@ async def lifespan(app: FastAPI):
     logger.info("Приложение запущено")
 
     try:
-        app.state.loaded_model = await run_in_threadpool(load_registered_model, Settings())
-        logger.info("Application started")
-        yield
+        settings = Settings()
+        await initialize_database(engine)
+        async with RabbitPublisher(
+            settings.rabbitmq_url,
+            QueueConfig(settings.queue_name, settings.queue_max_length or None),
+            confirm_timeout=1,
+        ) as publisher:
+            app.state.publisher = publisher
+            yield
     finally:
-        app.state.loaded_model = None
+        app.state.publisher = None
         await engine.dispose()
         logger.info("Application stopped")
 

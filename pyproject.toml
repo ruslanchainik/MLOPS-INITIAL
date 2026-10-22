@@ -27,7 +27,8 @@ web = [
     "pandas (>=3.0.6,<4.0.0)",
     "scikit-learn (>=1.8,<2.0)",
     "aio-pika (>=9.5,<10)",
-    "pamqp (>=3.3,<4)"
+    "pamqp (>=3.3,<4)",
+    "faststream[rabbit] (>=0.6,<0.8)"
 ]
 dev = [
     "pre-commit (>=4.6.2,<5.0.0)",

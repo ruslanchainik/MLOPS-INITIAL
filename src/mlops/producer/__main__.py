@@ -43,9 +43,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--metrics-file", default=None)
     parser.add_argument("--sample-interval", type=float, default=1.0)
     parser.add_argument(
-        "--rabbitmq-url", default=os.getenv("RABBITMQ_URL", "amqp://guest:guest@127.0.0.1:5672/")
+        "--rabbitmq-url", default=os.getenv("RABBITMQ_URL", "amqp://guest:guest@127.0.0.1:5673/")
     )
-    parser.add_argument("--management-url", default="http://127.0.0.1:15672")
+    parser.add_argument("--management-url", default="http://127.0.0.1:15673")
     parser.add_argument("--management-user", default="guest")
     parser.add_argument("--management-password", default="guest")
     return parser

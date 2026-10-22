@@ -32,9 +32,7 @@ def read_results(directory: Path, name: str) -> list[dict[str, str]]:
 def check_workers(processes: list[subprocess.Popen]) -> None:
     for process in processes:
         if process.poll() is not None:
-            raise RuntimeError(
-                f"Synthetic consumer exited early: {process.returncode}; inspect worker logs"
-            )
+            raise RuntimeError(f"Worker exited early: {process.returncode}; inspect worker logs")
 
 
 async def run_scenario(args: argparse.Namespace) -> None:
@@ -51,7 +49,7 @@ async def run_scenario(args: argparse.Namespace) -> None:
     started = time.monotonic()
     drained = False
     consumed = []
-    print(f"{name}: SYNTHETIC consumer, workers={workers}, queue={queue}", flush=True)
+    print(f"{name}: FastStream/MLflow worker, workers={workers}, queue={queue}", flush=True)
 
     async with RabbitPublisher(args.rabbitmq_url, config) as observer:
         try:
@@ -60,29 +58,21 @@ async def run_scenario(args: argparse.Namespace) -> None:
                 logs.append(log)
                 ready = directory / f"{name}_worker{index}.ready"
                 ready_files.append(ready)
-                command = [
-                    sys.executable,
-                    "-m",
-                    "mlops.producer.slow_consumer",
-                    "--queue",
-                    queue,
-                    "--mode",
-                    mode,
-                    "--max-length",
-                    str(args.max_length),
-                    "--delay",
-                    str(args.delay),
-                    "--worker-id",
-                    f"worker-{index}",
-                    "--results-file",
-                    str(directory / f"{name}_worker{index}.csv"),
-                    "--ready-file",
-                    str(ready),
-                    "--rabbitmq-url",
-                    args.rabbitmq_url,
-                ]
+                command = [sys.executable, "-m", "uvicorn", "mlops.worker:app", "--port", "0"]
+                worker_env = dict(
+                    os.environ,
+                    RABBITMQ_URL=args.rabbitmq_url,
+                    QUEUE_NAME=queue,
+                    QUEUE_MAX_LENGTH=str(max_length or 0),
+                    INFERENCE_DELAY_SECONDS=str(args.delay),
+                    WORKER_METRICS_FILE=str(directory / f"{name}_worker{index}.csv"),
+                    WORKER_READY_FILE=str(ready),
+                    MLFLOW_ENABLE_PROXY_MULTIPART_DOWNLOAD="false",
+                )
                 processes.append(
-                    await asyncio.to_thread(subprocess.Popen, command, stdout=log, stderr=log)
+                    await asyncio.to_thread(
+                        subprocess.Popen, command, stdout=log, stderr=log, env=worker_env
+                    )
                 )
             async with asyncio.timeout(min(args.timeout, 30)):
                 while not all(path.exists() for path in ready_files):
@@ -124,6 +114,7 @@ async def run_scenario(args: argparse.Namespace) -> None:
                             break
                         await asyncio.sleep(0.1)
             drained = True
+            completion_seconds = time.monotonic() - started
         finally:
             for process in processes:
                 if process.poll() is None:
@@ -136,9 +127,19 @@ async def run_scenario(args: argparse.Namespace) -> None:
                     await asyncio.to_thread(process.wait)
             for log in logs:
                 log.close()
+            for ready in ready_files:
+                ready.unlink(missing_ok=True)
 
             if drained:
                 await observer.delete_empty_queue()
+                for suffix in (".retry", ".dlq"):
+                    channel = await observer._channel.get_underlay_channel()
+                    state = await channel.queue_declare(queue=queue + suffix, passive=True)
+                    if state.message_count or state.consumer_count:
+                        raise RuntimeError(f"Experiment queue is not empty: {queue + suffix}")
+                    await observer._channel.queue_delete(
+                        queue + suffix, if_empty=False, if_unused=False
+                    )
 
     consumed = read_results(directory, name)
     with closing(sqlite3.connect(directory / f"{name}.sqlite3")) as db:
@@ -151,9 +152,28 @@ async def run_scenario(args: argparse.Namespace) -> None:
     actual = {row["task_id"] for row in consumed}
     if len(expected) != args.count or actual != expected:
         raise RuntimeError("Consumer UUIDs do not match the confirmed SQLite outbox")
+    from sqlalchemy import select
+
+    from mlops.db import task_results
+    from mlops.db.session import create_db_engine
+
+    engine = create_db_engine()
+    try:
+        async with engine.connect() as connection:
+            saved = set(
+                (
+                    await connection.execute(
+                        select(task_results.c.task_id).where(task_results.c.task_id.in_(expected))
+                    )
+                ).scalars()
+            )
+        if saved != expected:
+            raise RuntimeError("PostgreSQL results do not match the producer outbox")
+    finally:
+        await engine.dispose()
     summary = {
         "scenario": name,
-        "consumer": "synthetic_sleep",
+        "consumer": "faststream_mlflow",
         "queue": queue,
         "workers": workers,
         "count": args.count,
@@ -163,8 +183,9 @@ async def run_scenario(args: argparse.Namespace) -> None:
         "rejected": stats.rejected,
         "retries": stats.retries,
         "duplicates": len(consumed) - len(actual),
+        "database_results": len(saved),
         "publish_seconds": publish_seconds,
-        "completion_seconds": time.monotonic() - started,
+        "completion_seconds": completion_seconds,
         "sample_interval_seconds": args.sample_interval,
         "note": "Management statistics are sampled asynchronously; RSS is process peak, broker memory is whole node.",
     }
@@ -174,7 +195,7 @@ async def run_scenario(args: argparse.Namespace) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Measure three synthetic-consumer scenarios against real RabbitMQ.\n\nEach scenario runs in its own process, with a fresh queue and outbox. Sampling\ncontinues through consumption; results are checked against the durable outbox.\nThese measurements do NOT validate FastStream, MLflow or PostgreSQL.\n"
+        description="Compare three real RabbitMQ/FastStream/MLflow scenarios"
     )
     parser.add_argument("--count", type=int, default=1000)
     parser.add_argument("--delay", type=float, default=0.05)
@@ -184,9 +205,9 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--scenario", choices=SCENARIOS, help=argparse.SUPPRESS)
     parser.add_argument(
-        "--rabbitmq-url", default=os.getenv("RABBITMQ_URL", "amqp://guest:guest@127.0.0.1:5672/")
+        "--rabbitmq-url", default=os.getenv("RABBITMQ_URL", "amqp://guest:guest@127.0.0.1:5673/")
     )
-    parser.add_argument("--management-url", default="http://127.0.0.1:15672")
+    parser.add_argument("--management-url", default="http://127.0.0.1:15673")
     parser.add_argument("--management-user", default="guest")
     parser.add_argument("--management-password", default="guest")
     args = parser.parse_args()
@@ -204,7 +225,7 @@ def main() -> None:
         asyncio.run(run_scenario(args))
         return
     directory = args.output_dir or Path("metrics") / datetime.now(UTC).strftime(
-        "synthetic-%Y%m%d-%H%M%S"
+        "mlflow-%Y%m%d-%H%M%S"
     )
     directory.mkdir(parents=True, exist_ok=False)
     for name in SCENARIOS:
@@ -238,7 +259,7 @@ def main() -> None:
     from plot_backpressure import plot
 
     plot(directory)
-    print(f"Synthetic experiment completed: {directory}")
+    print(f"MLflow experiment completed: {directory}")
 
 
 if __name__ == "__main__":

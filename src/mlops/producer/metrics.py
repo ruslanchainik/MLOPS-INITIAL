@@ -107,7 +107,7 @@ class MetricsSampler:
     async def __aenter__(self) -> MetricsSampler:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._file = self.path.open("w", newline="", encoding="utf-8")
-        self._writer = csv.DictWriter(self._file, fieldnames=FIELDS)
+        self._writer = csv.DictWriter(self._file, fieldnames=FIELDS, lineterminator="\n")
         self._writer.writeheader()
         await self._sample()
         self._task = asyncio.create_task(self._loop())
