@@ -1,9 +1,11 @@
 """Load one immutable Registry version for the lifetime of the application."""
 
 import logging
+import os
 from dataclasses import dataclass
 
 import mlflow
+import pandas as pd
 from mlflow.pyfunc import PyFuncModel
 from mlflow.tracking import MlflowClient
 
@@ -25,6 +27,7 @@ class LoadedModel:
 
 def load_registered_model(settings: Settings) -> LoadedModel:
     """Resolve the alias first, then load that exact version via pyfunc."""
+    os.environ.setdefault("MLFLOW_ENABLE_PROXY_MULTIPART_DOWNLOAD", "false")
     name = settings.mlflow_model_name
     alias = settings.mlflow_model_alias
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
@@ -47,3 +50,18 @@ def load_registered_model(settings: Settings) -> LoadedModel:
 
     logger.info("Loaded MLflow model name=%s version=%s", name, version.version)
     return LoadedModel(model=model, name=name, version=str(version.version))
+
+
+def single_binary_prediction(predictions: object) -> str:
+    """Accept a one-row sequence without coercing booleans or numeric labels."""
+    if isinstance(predictions, (str, bytes, dict, pd.DataFrame)):
+        raise ValueError("Model must return a sequence of one class label")
+    try:
+        if len(predictions) != 1:  # type: ignore[arg-type]
+            raise ValueError("Model must return exactly one prediction")
+        value = next(iter(predictions))  # type: ignore[arg-type]
+    except (TypeError, StopIteration) as error:
+        raise ValueError("Model must return a sequence of one class label") from error
+    if not isinstance(value, str) or value not in {"true", "false"}:
+        raise ValueError("Model prediction must be the string 'true' or 'false'")
+    return value

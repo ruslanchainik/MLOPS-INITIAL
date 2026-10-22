@@ -10,6 +10,15 @@ jobs:
     timeout-minutes: 15
 
     services:
+      rabbitmq:
+        image: rabbitmq:4.1-management
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
       postgres:
         image: postgres:17-bookworm
         env:
@@ -30,6 +39,7 @@ jobs:
       POSTGRES_DB: mlops_test
       POSTGRES_USER: mlops_test
       POSTGRES_PASSWORD: test_password
+      RABBITMQ_URL: amqp://guest:guest@127.0.0.1:5672/
       RUN_DB_TESTS: "1"
       RUN_MODEL_TESTS: "1"
       TEST_BASE_URL: http://127.0.0.1:8000
@@ -92,6 +102,18 @@ jobs:
           cat "$RUNNER_TEMP/mlops-app.log"
           exit 1
 
+      - name: Start worker
+        run: |
+          poetry run uvicorn mlops.worker:app --host 127.0.0.1 --port 8002 > "$RUNNER_TEMP/worker.log" 2>&1 &
+          for attempt in {1..60}; do
+            if curl --fail --silent --max-time 2 http://127.0.0.1:8002/health > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/worker.log"
+          exit 1
+
       - name: Test with coverage
         run: poetry run pytest --cov --cov-report=term-missing --cov-report=xml
 
@@ -106,7 +128,7 @@ jobs:
       - name: Show service logs on failure
         if: failure()
         run: |
-          for log in "$RUNNER_TEMP/mlflow.log" "$RUNNER_TEMP/mlops-app.log"; do
+          for log in "$RUNNER_TEMP/mlflow.log" "$RUNNER_TEMP/mlops-app.log" "$RUNNER_TEMP/worker.log"; do
             if [ -f "$log" ]; then
               cat "$log"
             fi
@@ -120,4 +142,5 @@ jobs:
           path: |
             ${{ runner.temp }}/mlflow.log
             ${{ runner.temp }}/mlops-app.log
+            ${{ runner.temp }}/worker.log
           if-no-files-found: ignore

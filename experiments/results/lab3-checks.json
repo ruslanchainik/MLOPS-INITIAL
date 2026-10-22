@@ -1,0 +1,80 @@
+{
+  "retry_dlq_handoff": [
+    {
+      "target": ".retry",
+      "failure": "nack",
+      "original_unacked_on_failure": true,
+      "redelivered_after_channel_close": true,
+      "acked_after_confirmed_handoff": true,
+      "body_and_id_retained": true
+    },
+    {
+      "target": ".retry",
+      "failure": "unroutable",
+      "original_unacked_on_failure": true,
+      "redelivered_after_channel_close": true,
+      "acked_after_confirmed_handoff": true,
+      "body_and_id_retained": true
+    },
+    {
+      "target": ".dlq",
+      "failure": "nack",
+      "original_unacked_on_failure": true,
+      "redelivered_after_channel_close": true,
+      "acked_after_confirmed_handoff": true,
+      "body_and_id_retained": true
+    },
+    {
+      "target": ".dlq",
+      "failure": "unroutable",
+      "original_unacked_on_failure": true,
+      "redelivered_after_channel_close": true,
+      "acked_after_confirmed_handoff": true,
+      "body_and_id_retained": true
+    }
+  ],
+  "api_overload": {
+    "status": 503,
+    "retry_after": "1",
+    "seconds": 0.005374624997784849,
+    "ready": 20,
+    "database_rows_before_consumption": 0,
+    "accepted": 20,
+    "endpoint": "/api/v1/tasks",
+    "rejected_database_rows": 0
+  },
+  "accepted_tasks_completed": 20,
+  "compose_scaling": {
+    "consumers": 2,
+    "command": "docker compose up -d --wait --scale worker=2 worker"
+  },
+  "poison_dlq": {
+    "message_id": "b602c4ab-c81e-40ba-902d-12588bba892d",
+    "deliveries": 3,
+    "body_retained": true
+  },
+  "idempotency": {
+    "task_id": "63299ff2-831a-4d95-9234-4bf63119169c",
+    "publishes": 2,
+    "rows": 1
+  },
+  "graceful_sigterm": {
+    "task_id": "12c34f9a-ae77-4be1-802f-e6fc605d7256",
+    "rows": 1,
+    "shutdown_seconds": 4.430514874999062,
+    "health_during_task": "204 0.02167087499947229"
+  },
+  "sigkill_redelivery": {
+    "task_id": "8d9a6d61-68ba-48f1-a82d-1491c8531d66",
+    "requeued_ready": 1,
+    "rows": 1
+  },
+  "commit_before_ack_redelivery": {
+    "task_id": "63299ff2-831a-4d95-9234-4bf63119169c",
+    "rows": 1,
+    "unacked_connection_closed": true
+  },
+  "prefetch_counts": [
+    1
+  ]
+}

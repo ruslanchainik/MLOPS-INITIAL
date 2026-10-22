@@ -5,6 +5,8 @@ from fastapi import Request
 from sqlalchemy import URL
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
+from mlops.db import metadata
+
 
 def create_db_engine() -> AsyncEngine:
     url = URL.create(
@@ -16,6 +18,11 @@ def create_db_engine() -> AsyncEngine:
         password=os.environ["POSTGRES_PASSWORD"],
     )
     return create_async_engine(url, pool_pre_ping=True, connect_args={"timeout": 3})
+
+
+async def initialize_database(engine: AsyncEngine) -> None:
+    async with engine.begin() as connection:
+        await connection.run_sync(metadata.create_all)
 
 
 async def get_db(request: Request) -> AsyncIterator[AsyncSession]:

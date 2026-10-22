@@ -1,7 +1,8 @@
 # mlops
 
-FastAPI service for binary claim classification, with MLflow model loading,
-async PostgreSQL access, health checks, containerized build and CI/CD.
+Асинхронная классификация текстов: batch producer / FastAPI → RabbitMQ →
+FastStream worker → модель из MLflow → PostgreSQL. Требования лабораторной №3,
+измерения и команды для защиты приведены в конце README.
 
 ## Stack
 
@@ -14,6 +15,8 @@ async PostgreSQL access, health checks, containerized build and CI/CD.
 | PostgreSQL | 17 |
 | Poetry | 2.4.3 |
 | Ruff | 0.16 |
+| FastStream | 0.7 |
+| RabbitMQ | 4.1 |
 
 ## Architecture
 
@@ -22,13 +25,16 @@ src/mlops/
 ├── main.py              Application entry point, lifespan, request logging middleware
 ├── config.py            Pydantic settings
 ├── model.py             Registry alias resolution and model loading
+├── worker.py            FastStream subscriber, inference, result commit, retries / DLQ
+├── messaging.py         Shared task_id / text message contract
+├── producer/            Batch publisher, SQLite outbox and metrics
 ├── core/
 │   └── logging.py       Root logger configuration
 ├── db/
 │   └── session.py       Async engine factory, get_db dependency
 └── api/
     ├── healthz.py       Liveness probe
-    ├── process.py       Text classification with the loaded model
+    ├── process.py       One confirmed publication; 202 or 503
     └── v1/
         ├── router.py    /api/v1 router
         ├── health.py    Readiness probe with PostgreSQL check
@@ -40,9 +46,11 @@ Lifecycle:
 - `lifespan` creates one `AsyncEngine` at startup and disposes it at shutdown.
 - `async_sessionmaker` is stored in `app.state.session_factory`.
 - `get_db` yields one `AsyncSession` per request and returns the connection to the pool on exit.
-- Startup resolves the configured Registry alias, loads that exact model version once
-  and stores it in `app.state.loaded_model`. Startup fails if the model cannot be loaded.
-- `/process` calls the loaded model in a thread pool and returns its Registry version.
+- API startup creates the results table and opens one confirmed RabbitMQ publisher.
+- Worker startup resolves the configured Registry alias and loads that exact version once.
+  Startup fails if the model cannot be loaded.
+- `/api/v1/tasks` publishes a task; the worker runs inference in a thread and commits
+  the result before acknowledging delivery. Results include the loaded Registry version.
 
 Engine configuration: `pool_pre_ping=True`, connect timeout 3s. Database health check is bounded by a 3s `asyncio.timeout`.
 
@@ -53,7 +61,7 @@ Engine configuration: `pool_pre_ping=True`, connect timeout 3s. Database health 
 | GET | `/healthz` | Liveness. No database access. |
 | GET | `/api/v1/version` | Application version. |
 | GET | `/api/v1/health` | Readiness. Runs `SELECT version()` against PostgreSQL. |
-| POST | `/process` | Classifies `text`, returning the prediction and loaded model version. |
+| POST | `/api/v1/tasks` | Publishes `text`; 202 with task ID, or immediate 503 with Retry-After. |
 
 `/api/v1/health` response:
 
@@ -74,18 +82,16 @@ Engine configuration: `pool_pre_ping=True`, connect timeout 3s. Database health 
 
 Returns HTTP 200 with `"status": "degraded"` and `"status": "down"` on the component when the database is unreachable.
 
-`/process` accepts `{"text": "The Earth is flat."}`. Example response:
+`/api/v1/tasks` accepts `{"text": "The Earth is flat."}`. Example HTTP 202 response:
 
 ```json
 {
-  "prediction": "false",
-  "model_name": "claim-veracity",
-  "model_version": "1"
+  "task_id": "4eb7e196-7342-4210-8933-a25bd92c2017"
 }
 ```
 
-The version depends on the alias resolved at startup. Empty or whitespace-only text
-returns 422; prediction failures return 500 without internal error details.
+Empty or whitespace-only text returns 422. Results are stored in `task_results`;
+permanent processing errors go to `inference_tasks.dlq` after three deliveries.
 Swagger UI is available at `http://127.0.0.1:8001/docs` when using Compose.
 
 ## Environment variables
@@ -104,9 +110,14 @@ Swagger UI is available at `http://127.0.0.1:8001/docs` when using Compose.
 | `S3_ACCESS_KEY` | yes | — | RustFS, MLflow server |
 | `S3_SECRET_KEY` | yes | — | RustFS, MLflow server |
 | `MLFLOW_BUCKET` | yes | — | MLflow artifact bucket |
-| `MLFLOW_TRACKING_URI` | yes | — | application; Compose sets `http://mlflow:5000` |
-| `MLFLOW_MODEL_NAME` | no | `claim-veracity` | application |
-| `MLFLOW_MODEL_ALIAS` | no | `champion` | application |
+| `MLFLOW_TRACKING_URI` | no | `http://127.0.0.1:5000` | worker; Compose sets `http://mlflow:5000` |
+| `MLFLOW_MODEL_NAME` | no | `claim-veracity` | worker |
+| `MLFLOW_MODEL_ALIAS` | no | `champion` | worker |
+| `RABBITMQ_URL` | no | `amqp://guest:guest@127.0.0.1:5673/` | host processes; Compose uses `rabbitmq:5672` |
+| `QUEUE_NAME` | no | `inference_tasks` | host worker; producer uses `--queue` |
+| `QUEUE_MAX_LENGTH` | no | `20` | API / worker; `0` selects unbounded baseline |
+| `PREFETCH_COUNT` | no | `1` | worker |
+| `INFERENCE_DELAY_SECONDS` | no | `0.05` | worker; API Retry-After calculation |
 
 Compose reads `.env` to configure its services. For a local application process,
 Pydantic settings also read `.env` for MLflow configuration. Database connection
@@ -126,7 +137,7 @@ sections below. This creates `claim-veracity` versions and assigns `champion`.
 If the model is already registered, proceed directly to application startup:
 
 ```bash
-docker compose up --build -d --wait --wait-timeout 120 app
+docker compose up --build -d --wait --wait-timeout 120 app worker
 docker compose ps
 ```
 
@@ -134,14 +145,14 @@ The API is available at `http://127.0.0.1:8001`. On Windows PowerShell:
 
 ```powershell
 $body = @{ text = "The Earth is flat." } | ConvertTo-Json
-Invoke-RestMethod -Uri http://127.0.0.1:8001/process -Method Post `
+Invoke-RestMethod -Uri http://127.0.0.1:8001/api/v1/tasks -Method Post `
     -ContentType "application/json" -Body $body
 ```
 
 Inspect startup and inference logs:
 
 ```bash
-docker compose logs --tail=100 app
+docker compose logs --tail=100 app worker
 ```
 
 Stop services while keeping database and MLflow volumes:
@@ -153,17 +164,17 @@ docker compose down
 ### Switch the working model
 
 In MLflow UI, open **Model registry**, select `claim-veracity` and move `champion`
-to another registered version. An already running application continues to use
-the previous version. Call `/process` to verify that `model_version` is unchanged.
+to another registered version. A running worker continues to use the previous
+version. Inspect `task_results.model_version` after submitting a task.
 
 ```bash
-docker compose restart app
+docker compose restart worker
 docker compose ps
 ```
 
-Wait until app is healthy, then call `/process` again. `model_version` should now
+Wait until worker is healthy, then call `/api/v1/tasks` again. `model_version` should now
 match the new alias target; the prediction itself can remain the same. To roll back,
-restore the alias to the previous version and restart the application again.
+restore the alias to the previous version and restart the worker again.
 
 Changing the Registry alias alone does not replace an object already in memory.
 In-process hot reload would need to coordinate active requests and model replacement
@@ -265,7 +276,7 @@ is local and does not require MLflow; the training runs will link the prepared d
 ### Binary MultiFC training and Registry
 
 Start MLflow and prepare the data before training. The application needs an existing
-Registry model and alias, so start the tracking services first:
+Registry model and alias for the worker, so start the tracking services first:
 
 ```bash
 docker compose up --build -d mlflow
@@ -353,7 +364,7 @@ The run goes to the `clickbait17_eda` experiment. The dataset is registered as `
 
 ## Run locally
 
-Requires Python 3.14, Poetry 2.4.3, a reachable PostgreSQL instance and an MLflow
+Requires Python 3.14, Poetry, reachable RabbitMQ / PostgreSQL and an MLflow
 Registry with the configured model and alias. Use database credentials matching
 your PostgreSQL instance.
 
@@ -362,16 +373,22 @@ poetry install --with web,dev
 ```
 
 ```bash
-export DB_HOST=127.0.0.1 DB_PORT=5432 POSTGRES_DB=mlops POSTGRES_USER=mlops POSTGRES_PASSWORD=mlops
+set -a
+source .env
+set +a
+export DB_HOST=127.0.0.1 DB_PORT=5433
 export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
 export MLFLOW_ENABLE_PROXY_MULTIPART_DOWNLOAD=false
 poetry run uvicorn mlops.main:app --reload --port 8000
 ```
 
+Run `poetry run uvicorn mlops.worker:app --port 8002` in a second terminal with
+the same environment. Worker `/health` returns 204 and shares the inference event loop.
+
 On Windows PowerShell:
 
 ```powershell
-$env:DB_HOST="127.0.0.1"; $env:DB_PORT="5432"; $env:POSTGRES_DB="mlops"; $env:POSTGRES_USER="mlops"; $env:POSTGRES_PASSWORD="mlops"
+$env:DB_HOST="127.0.0.1"; $env:DB_PORT="5433"; $env:POSTGRES_DB="mlops"; $env:POSTGRES_USER="mlops"; $env:POSTGRES_PASSWORD="<value from .env>"
 $env:MLFLOW_TRACKING_URI="http://127.0.0.1:5000"
 $env:MLFLOW_ENABLE_PROXY_MULTIPART_DOWNLOAD="false"
 poetry run uvicorn mlops.main:app --reload --port 8000
@@ -401,26 +418,38 @@ With coverage:
 poetry run pytest --cov --cov-report=term-missing
 ```
 
-Unit tests mock `AsyncSession` and the startup Registry loader. They require no
-external services. Integration tests make HTTP requests to a separately running
-application and are enabled explicitly:
+Unit tests mock services and use `TestRabbitBroker` for worker handlers.
+Producer and worker recovery integration tests start real RabbitMQ with Testcontainers (Docker required).
+Additional live tests require the complete stack and explicitly enabled flags:
 
 ```bash
-docker compose up -d --wait --wait-timeout 120 app
+docker compose up -d --wait --wait-timeout 120 app worker
+set -a
+source .env
+set +a
+export DB_HOST=127.0.0.1 DB_PORT=5433
 RUN_DB_TESTS=1 RUN_MODEL_TESTS=1 TEST_BASE_URL=http://127.0.0.1:8001 poetry run pytest
 ```
 
-On Windows PowerShell:
+On Windows PowerShell (start `app worker` first, then import the local credentials
+and use the PostgreSQL host port):
 
 ```powershell
+Get-Content .env | ForEach-Object {
+    if ($_ -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
+        [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], 'Process')
+    }
+}
+$env:DB_HOST="127.0.0.1"
+$env:DB_PORT="5433"
 $env:RUN_DB_TESTS="1"
 $env:RUN_MODEL_TESTS="1"
 $env:TEST_BASE_URL="http://127.0.0.1:8001"
 poetry run pytest
 ```
 
-The live tests check PostgreSQL connectivity and `/process` predictions with a
-numeric Registry version. CI also sets `TEST_MODEL_VERSION` and
+The live tests check PostgreSQL connectivity and the complete `/api/v1/tasks` → worker →
+database flow, including a numeric Registry version. CI also sets `TEST_MODEL_VERSION` and
 `TEST_MODEL_PREDICTION` to check the exact fixture version and output.
 
 ## Lint and format
@@ -445,16 +474,16 @@ Hooks run `ruff check --fix`, `ruff format`, trailing whitespace, end-of-file, Y
 
 `.github/workflows/ci.yml` runs on every push and pull request. It:
 
-- starts a PostgreSQL 17 service and installs the locked web/dev/ml dependencies;
+- starts PostgreSQL 17 / RabbitMQ 4.1 services and installs the locked web/dev/ml dependencies;
 - checks Ruff lint and formatting;
 - starts an isolated MLflow server with SQLite backend and a separate filesystem artifact store under the runner's temporary directory;
 - runs `tests/register_ci_model.py` to register a constant `false` model as version 1 of `claim-veracity` and assign `champion`;
-- starts the application and waits for readiness;
+- starts the application and worker and waits for readiness;
 - runs unit tests and both HTTP integration tests with coverage;
 - uploads `coverage.xml` and MLflow/application logs, printing service logs on failure.
 
 The small CI model checks Registry loading, the DataFrame/string contract and
-HTTP inference. It is created in a fresh Registry for each job and does not change
+asynchronous HTTP submission and worker inference. It is created in a fresh Registry for each job and does not change
 the development Registry. MultiFC download and quality experiments are separate
 from this API integration check. The fixture script is intended only for this
 isolated CI server, not for registering a working model in the development environment.
@@ -474,3 +503,60 @@ poetry lock
 ```
 
 Both files must be committed together.
+
+## Лабораторная №3: backpressure
+
+Сохранён существующий producer; добавлены worker и таблица результатов, обновлён
+`/api/v1/tasks`. Конвейер использует `faststream[rabbit]`, `aio-pika` и `pamqp`;
+интеграционные тесты — `testcontainers[rabbitmq]`.
+Синтетический consumer и отдельный Compose для producer заменены общим конвейером.
+
+### Почему выбраны эти механизмы
+
+`inference_tasks` — durable classic queue с `x-max-length=20` и
+`x-overflow=reject-publish`. Лимит относится к ready-сообщениям; дополнительно
+каждый worker удерживает максимум одно unacked. Persistent публикация, mandatory
+routing и publisher confirms дают источнику сигнал NACK при заполнении.
+Management API используется только для измерений. Источник сохраняет текущую
+задачу в дисковом SQLite outbox и повторяет тот же UUID с exponential backoff
+20–500 мс и jitter. Следующую задачу создаёт после подтверждения текущей.
+RAM не растёт с размером входного batch. После 60 секунд отказов запуск завершается
+с ошибкой; тот же `--outbox` / `--batch-id` продолжает незавершённую работу.
+
+Опрос Management API запаздывает и допускает гонки между publishers; фиксированная
+частота не адаптируется к числу workers; `drop-head` теряет старые задачи;
+неограниченная очередь переносит перегрузку в хранилище брокера. Поэтому управление
+публикацией опирается непосредственно на confirms и фактический отказ брокера.
+
+`prefetch_count=1`: один последовательный обработчик и один поток исполнения
+inference на процесс. `asyncio.to_thread` освобождает event loop; задержка
+`INFERENCE_DELAY_SECONDS` задаётся через `asyncio.sleep`. Два процесса дают два
+одновременно исполняемых inference. Увеличение только prefetch резервирует лишние
+сообщения, не добавляя вычислительной конкурентности.
+
+`ack_policy=MANUAL`: ACK отправляется после commit PostgreSQL. Уникальный PK
+`task_id` и атомарный `INSERT ... ON CONFLICT DO NOTHING` исключают дубликат
+результата даже при падении между commit и ACK. Ранняя ACK теряет незавершённую
+работу; ACK при любой ошибке скрывает сбои; бесконечный requeue блокирует очередь
+ядовитыми сообщениями. У нас три доставки, затем `.dlq`; перед ACK исходного
+сообщения подтверждается persistent публикация в `.retry` / `.dlq`.
+Подтверждением считается только AMQP `Basic.Ack`; NACK, отсутствие confirm,
+таймаут или ошибка публикации оставляют исходное сообщение без ACK. Worker автоматически
+повторяет перенос с backoff 20–500 мс, сохраняя тело, UUID и номер попытки обработки.
+Ошибки транспорта не расходуют три попытки inference. После восстановления маршрута
+обработка продолжается без перезапуска consumer. При отмене обработчика ACK не
+отправляется: закрытие канала возвращает сообщение брокеру.
+Retry — quorum queue с TTL 100 мс и at-least-once dead lettering обратно в main:
+если main заполнена, broker сохраняет сообщение до подтверждённого переноса.
+Главная очередь остаётся classic, поскольку quorum `reject-publish` допускает
+кратковременное превышение лимита.
+
+API делает одну попытку публикации, без ожидания свободного места. При NACK — 503,
+`Retry-After=max(1, ceil(INFERENCE_DELAY_SECONDS))`: ближайшее освобождение слота
+занимает примерно один интервал обработки, HTTP delay-seconds округляется вверх.
+Это ориентир для повторного запроса, а не обещание свободного места. Сеть / confirm
+ограничены таймаутом 1 с. При потере confirm ответ содержит UUID и явно неизвестный
+исход публикации. HTTP 202 означает подтверждение брокера, а не завершённый inference.
+В БД создаются только завершённые результаты; PENDING-записей нет.
+503 — load shedding: неподконтрольному внешнему клиенту отказывают в приёме.
+Backpressure batch producer продолжает ту же задачу, автоматически замедляя генерацию.

@@ -12,10 +12,15 @@ services:
       MLFLOW_TRACKING_URI: http://mlflow:5000
       MLFLOW_MODEL_NAME: ${MLFLOW_MODEL_NAME:-claim-veracity}
       MLFLOW_MODEL_ALIAS: ${MLFLOW_MODEL_ALIAS:-champion}
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      QUEUE_MAX_LENGTH: ${QUEUE_MAX_LENGTH:-20}
+      INFERENCE_DELAY_SECONDS: ${INFERENCE_DELAY_SECONDS:-0.05}
     depends_on:
       db:
         condition: service_healthy
       mlflow:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       test:
@@ -37,8 +42,55 @@ services:
     networks:
       - backend
 
+  worker:
+    build: .
+    command: uvicorn mlops.worker:app --host 0.0.0.0 --port 8000
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_MODEL_NAME: ${MLFLOW_MODEL_NAME:-claim-veracity}
+      MLFLOW_MODEL_ALIAS: ${MLFLOW_MODEL_ALIAS:-champion}
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      QUEUE_MAX_LENGTH: ${QUEUE_MAX_LENGTH:-20}
+      PREFETCH_COUNT: ${PREFETCH_COUNT:-1}
+      INFERENCE_DELAY_SECONDS: ${INFERENCE_DELAY_SECONDS:-0.05}
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 20s
+    stop_grace_period: 120s
+    networks:
+      - backend
+
+  rabbitmq:
+    image: rabbitmq:4.1-management
+    hostname: rabbitmq
+    ports:
+      - "127.0.0.1:5673:5672"
+      - "127.0.0.1:15673:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, ping]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    networks:
+      - backend
+
   db:
     image: postgres:17-bookworm
+    ports:
+      - "127.0.0.1:5433:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
@@ -164,6 +216,7 @@ services:
       - backend
 
 volumes:
+  rabbitmq_data:
   postgres_data:
   mlflow_db_data:
   rustfs_data:
