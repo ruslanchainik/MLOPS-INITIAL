@@ -1,4 +1,5 @@
-import fcntl
+import errno
+import os
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -26,12 +27,26 @@ class SQLiteOutbox:
 
     def __enter__(self) -> SQLiteOutbox:
         if self.path != ":memory:":
-            self._lock = open(self.path + ".lock", "a")
+            self._lock = open(self.path + ".lock", "a+b")
             try:
-                fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError as exc:
+                if os.name == "nt":
+                    import msvcrt
+
+                    self._lock.seek(0, os.SEEK_END)
+                    if self._lock.tell() == 0:
+                        self._lock.write(b"\0")
+                        self._lock.flush()
+                    self._lock.seek(0)
+                    msvcrt.locking(self._lock.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError as exc:
                 self._lock.close()
                 self._lock = None
+                if exc.errno not in {errno.EACCES, errno.EAGAIN}:
+                    raise
                 raise RuntimeError("Outbox is already in use by another producer") from exc
         try:
             return self._open()

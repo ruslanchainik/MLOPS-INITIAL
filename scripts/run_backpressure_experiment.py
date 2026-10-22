@@ -211,6 +211,11 @@ def main() -> None:
     parser.add_argument("--management-user", default="guest")
     parser.add_argument("--management-password", default="guest")
     args = parser.parse_args()
+    if os.name == "nt":
+        parser.error(
+            "Run this experiment in Linux/WSL2: native Windows SIGTERM cannot gracefully "
+            "stop the worker subprocesses. The API and batch producer support Windows."
+        )
     if (
         args.count <= 0
         or args.max_length <= 0

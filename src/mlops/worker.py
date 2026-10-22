@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
+from aio_pika.exceptions import AMQPError
 from faststream import AckPolicy
 from faststream.asgi import AsgiFastStream, make_ping_asgi
 from faststream.rabbit import Channel, RabbitBroker, RabbitMessage, RabbitQueue
@@ -23,7 +24,7 @@ from mlops.db.session import create_db_engine
 from mlops.messaging import TaskMessage
 from mlops.model import load_registered_model, single_binary_prediction
 from mlops.producer.metrics import peak_rss_mb
-from mlops.producer.publisher import PublishUncertain, QueueConfig
+from mlops.producer.publisher import PublishUncertain, QueueConfig, retry_delay
 
 settings = Settings()
 queue = QueueConfig(settings.queue_name, settings.queue_max_length or None)
@@ -131,17 +132,7 @@ async def handle_task(body: bytes, message: RabbitMessage) -> None:
             )
     except Exception as error:
         target = queue.name + (".retry" if attempt < 2 else ".dlq")
-        confirmation = await broker.publish(
-            body,
-            queue=target,
-            persist=True,
-            timeout=3,
-            content_type="application/json",
-            message_id=message.message_id,
-            headers={**message.headers, "attempt": attempt + 1},
-        )
-        if not isinstance(confirmation, Basic.Ack):
-            raise PublishUncertain(f"Retry/DLQ publication not confirmed: {target}") from error
+        await transfer_failed_task(body, message, target, attempt + 1)
         logger.warning(
             "Task failed attempt=%s target=%s error=%s", attempt + 1, target, type(error).__name__
         )
@@ -160,3 +151,39 @@ async def handle_task(body: bytes, message: RabbitMessage) -> None:
             )
             metrics_file.flush()
     await message.ack()
+
+
+async def transfer_failed_task(
+    body: bytes, message: RabbitMessage, target: str, attempt: int
+) -> None:
+    """Keep one delivery in flight until its persistent handoff is confirmed.
+
+    Transport retries do not consume inference attempts. Cancellation propagates
+    so shutdown can close the channel and return the unacked delivery to RabbitMQ.
+    """
+    failures = 0
+    while True:
+        try:
+            async with asyncio.timeout(3):
+                confirmation = await broker.publish(
+                    body,
+                    queue=target,
+                    persist=True,
+                    timeout=3,
+                    content_type="application/json",
+                    message_id=message.message_id,
+                    headers={**message.headers, "attempt": attempt},
+                )
+            if not isinstance(confirmation, Basic.Ack):
+                raise PublishUncertain(f"Retry/DLQ publication not confirmed: {target}")
+            return
+        except (AMQPError, PublishUncertain, TimeoutError, ConnectionError, OSError) as error:
+            failures += 1
+            delay = retry_delay(failures)
+            logger.warning(
+                "Handoff failed target=%s error=%s; retry in %.3fs",
+                target,
+                type(error).__name__,
+                delay,
+            )
+            await asyncio.sleep(delay)

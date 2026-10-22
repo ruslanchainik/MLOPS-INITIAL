@@ -1,5 +1,9 @@
 import asyncio
 import gc
+import os
+import subprocess
+import sys
+import textwrap
 from contextlib import closing
 from uuid import uuid4
 
@@ -129,3 +133,80 @@ async def test_connection_recovery_and_persistence(broker):
             await queue.delete(if_empty=True)
         with pytest.raises(producer.UnroutableTask):
             await publisher.publish_once(task)
+
+
+@pytest.mark.parametrize("attempt,suffix", [(0, ".retry"), (2, ".dlq")])
+def test_worker_resumes_after_handoff_route_is_restored(broker, attempt, suffix):
+    # A separate process imports the real subscriber with an isolated queue name.
+    script = textwrap.dedent("""
+        import asyncio
+        import os
+        import aio_pika
+        from mlops import worker
+
+        async def main():
+            await worker.broker.start()
+            connection = await aio_pika.connect(os.environ['RABBITMQ_URL'])
+            try:
+                channel = await connection.channel()
+                target = worker.queue.name + os.environ['HANDOFF_SUFFIX']
+                attempt = int(os.environ['HANDOFF_ATTEMPT'])
+                publish = worker.broker.publish
+                failed_handoff = asyncio.Event()
+
+                async def observe_handoff(*args, **kwargs):
+                    try:
+                        return await publish(*args, **kwargs)
+                    except Exception:
+                        failed_handoff.set()
+                        raise
+
+                worker.broker.publish = observe_handoff
+                await worker.broker.publish(
+                    b'first invalid json', queue=worker.queue.name,
+                    message_id='first', headers={'attempt': attempt}, persist=True,
+                )
+                # No target exists: publication returns NO_ROUTE while the main
+                # delivery must remain unacked and the consumer must stay alive.
+                await asyncio.wait_for(failed_handoff.wait(), timeout=5)
+                destination = await channel.declare_queue(target, durable=True)
+                await worker.broker.publish(
+                    b'second invalid json', queue=worker.queue.name,
+                    message_id='second', headers={'attempt': attempt}, persist=True,
+                )
+                async with asyncio.timeout(10):
+                    for expected in ('first', 'second'):
+                        while True:
+                            message = await destination.get(fail=False)
+                            if message is not None:
+                                break
+                            await asyncio.sleep(0.02)
+                        assert message.message_id == expected
+                        assert message.body == (expected + ' invalid json').encode()
+                        assert message.headers['attempt'] == attempt + 1
+                        await message.ack()
+                state = await channel.declare_queue(worker.queue.name, passive=True)
+                assert state.declaration_result.message_count == 0
+                assert state.declaration_result.consumer_count == 1
+            finally:
+                await worker.broker.stop()
+                await connection.close()
+
+        asyncio.run(main())
+    """)
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        env={
+            **os.environ,
+            "RABBITMQ_URL": broker_url(broker),
+            "QUEUE_NAME": f"handoff_{uuid4().hex}",
+            "QUEUE_MAX_LENGTH": "2",
+            "PREFETCH_COUNT": "1",
+            "HANDOFF_ATTEMPT": str(attempt),
+            "HANDOFF_SUFFIX": suffix,
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

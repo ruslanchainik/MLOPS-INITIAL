@@ -1,0 +1,18 @@
+{
+  "scenario": "bounded1",
+  "consumer": "faststream_mlflow",
+  "queue": "bp_exp_bounded1_356284d735e1",
+  "workers": 1,
+  "count": 1000,
+  "max_length": 20,
+  "delay_seconds": 0.02,
+  "published": 1000,
+  "rejected": 1074,
+  "retries": 1074,
+  "duplicates": 0,
+  "database_results": 1000,
+  "publish_seconds": 34.74035179099883,
+  "completion_seconds": 35.512487040999986,
+  "sample_interval_seconds": 0.5,
+  "note": "Management statistics are sampled asynchronously; RSS is process peak, broker memory is whole node."
+}

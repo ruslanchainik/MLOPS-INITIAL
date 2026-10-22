@@ -1,0 +1,65 @@
+{
+  "source_archive": "results.zip (provided by teammate)",
+  "source_archive_sha256": "5fe8421ed94539eed4e7f0c98e57b074a4b91a74d8e6b88a96e2d4d0c21deda4",
+  "source_readme_sha256": "8b16dc51ae681f30214aa2537aa9980272f704be1f49fc7f20f108f4fb9aa162",
+  "measurement_date": "2026-10-22",
+  "note": "Historical teammate measurements, not a rerun after the worker recovery fix. SQLite and logs remain in the original archive; macOS metadata and lock files are omitted.",
+  "files": [
+    {
+      "path": "experiments/results/lab3-checks.json",
+      "sha256": "b535cb1e12a531e63ff9916f07eb0d028c2b2aa96c68eefc35d9184a4123d842"
+    },
+    {
+      "path": "experiments/results/lab3/bounded2_summary.json",
+      "sha256": "db3604e23e4e7c8e1e31fcbe53c6fb372db5f979967e793029d14d7f9c893045"
+    },
+    {
+      "path": "experiments/results/lab3/latency.png",
+      "sha256": "d6855a5e5fc78dbea22619c7814025abe4d0798b964708a5b8e5852a94f1eb6a"
+    },
+    {
+      "path": "experiments/results/lab3/baseline_summary.json",
+      "sha256": "25286b21f510702418b78202133d1d63744e17740dea030ee5ebac5a0ec4063e"
+    },
+    {
+      "path": "experiments/results/lab3/bounded1_producer.csv",
+      "sha256": "401c3c2b829a68025b5f41d7403c096a6800af1f05353d9dab57fb14b115aaac"
+    },
+    {
+      "path": "experiments/results/lab3/bounded2_producer.csv",
+      "sha256": "45536ef1c0a22839fc96c2fbff14286ba8a8197f60432d86121ce86de9f07635"
+    },
+    {
+      "path": "experiments/results/lab3/queue_and_rate.png",
+      "sha256": "4252f48351b859ed3ca28f2cc764f377545d986ad8953720189f2e590cfac5c5"
+    },
+    {
+      "path": "experiments/results/lab3/bounded1_worker1.csv",
+      "sha256": "117d5158e24865c908cc8dc1254c347f5e9c30b89f5ab0ab468496f5fb265f02"
+    },
+    {
+      "path": "experiments/results/lab3/baseline_producer.csv",
+      "sha256": "c35e17036245400f20e43d60ea67f2f5a3c0365277a1f20bd23100e437bbada0"
+    },
+    {
+      "path": "experiments/results/lab3/bounded2_worker2.csv",
+      "sha256": "bb9d15d0c3dced2873b6d745f69e4bd91e49156493c3e36fc189736e5caabe25"
+    },
+    {
+      "path": "experiments/results/lab3/bounded2_worker1.csv",
+      "sha256": "5c333e44d516c2bad495a2e1dfe234f086f997a99376c400022a287136f6c5e9"
+    },
+    {
+      "path": "experiments/results/lab3/baseline_worker1.csv",
+      "sha256": "3b6bf3d39cafb9d230d57c0c6231058b4323f82ef37b43d606debada8a16b0a3"
+    },
+    {
+      "path": "experiments/results/lab3/bounded1_summary.json",
+      "sha256": "297e3bf05be8dbc5b0f6f84f1c870961d446990c19baf722a6b7bc9ff81add8c"
+    },
+    {
+      "path": "experiments/results/lab3/memory.png",
+      "sha256": "815021d78fd2e7560e3cfabe7d9cea7f409497cb9639b88f28bc94dbcda01918"
+    }
+  ]
+}

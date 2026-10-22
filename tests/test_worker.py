@@ -10,7 +10,6 @@ from pamqp.commands import Basic
 from mlops import worker
 from mlops.messaging import TaskMessage
 from mlops.model import LoadedModel
-from mlops.producer.publisher import PublishUncertain
 
 
 @pytest.fixture
@@ -72,18 +71,53 @@ async def test_poison_message_has_bounded_redeliveries(runtime, monkeypatch, att
         ConnectionError(),
     ],
 )
-async def test_failed_handoff_is_not_acknowledged(runtime, monkeypatch, attempt, outcome):
+async def test_failed_handoff_recovers_before_ack(runtime, monkeypatch, attempt, outcome):
     async with TestRabbitBroker(worker.broker) as broker:
         send = broker.publish
         ack = AsyncMock()
         monkeypatch.setattr(worker.RabbitMessage, "ack", ack)
-        failed = isinstance(outcome, Exception)
-        publish = AsyncMock(return_value=outcome, side_effect=outcome if failed else None)
+
+        async def publish_result(*args, **kwargs):
+            ack.assert_not_awaited()
+            if publish.await_count == 1:
+                if isinstance(outcome, Exception):
+                    raise outcome
+                return outcome
+            return Basic.Ack()
+
+        publish = AsyncMock(side_effect=publish_result)
         monkeypatch.setattr(broker, "publish", publish)
-        with pytest.raises(type(outcome) if failed else PublishUncertain):
-            await send(b"invalid json", worker.queue.name, headers={"attempt": attempt})
-        ack.assert_not_awaited()
+        monkeypatch.setattr(worker, "retry_delay", lambda failures: 0)
+        await asyncio.wait_for(
+            send(b"invalid json", worker.queue.name, headers={"attempt": attempt}), timeout=1
+        )
+        assert publish.await_count == 2
+        assert publish.await_args_list[0] == publish.await_args_list[1]
+        ack.assert_awaited_once()
         runtime[1].scalar.assert_not_awaited()
+
+
+async def test_unavailable_handoff_remains_unacked_on_cancellation(runtime, monkeypatch):
+    async with TestRabbitBroker(worker.broker) as broker:
+        send = broker.publish
+        ack = AsyncMock()
+        monkeypatch.setattr(worker.RabbitMessage, "ack", ack)
+        retrying = asyncio.Event()
+
+        async def unavailable(*args, **kwargs):
+            retrying.set()
+            raise ConnectionError("offline")
+
+        monkeypatch.setattr(broker, "publish", unavailable)
+        delivery = asyncio.create_task(send(b"invalid json", worker.queue.name))
+        try:
+            await asyncio.wait_for(retrying.wait(), timeout=1)
+            ack.assert_not_awaited()
+        finally:
+            delivery.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await delivery
+        ack.assert_not_awaited()
 
 
 @pytest.mark.parametrize("attempt", [0, 2])

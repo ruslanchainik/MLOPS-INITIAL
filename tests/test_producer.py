@@ -10,7 +10,12 @@ from pamqp.commands import Basic
 
 from mlops.messaging import TaskMessage
 from mlops.producer import publisher as producer
+from mlops.producer.metrics import peak_rss_mb
 from mlops.producer.outbox import PendingTask, SQLiteOutbox
+
+
+def test_process_peak_memory_is_available():
+    assert peak_rss_mb() > 0
 
 
 @pytest.fixture

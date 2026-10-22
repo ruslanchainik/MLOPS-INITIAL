@@ -1,0 +1,31 @@
+{
+  "timestamp_utc": "2026-10-22T20:53:45.525062+00:00",
+  "queue": "verify_90e13db2899c",
+  "api_overload": {
+    "status": 503,
+    "seconds": 0.022290100001555402,
+    "retry_after": "3",
+    "ready": 3,
+    "pending_rows": 0,
+    "rejected_result_rows": 0
+  },
+  "health_during_inference": {
+    "status": 204,
+    "seconds_including_docker_exec": 0.7114759000032791
+  },
+  "graceful_sigterm": {
+    "seconds": 3.747244399994088,
+    "exit_code": 0,
+    "completed_rows": 1,
+    "remaining_ready": 2
+  },
+  "idempotency": {
+    "publishes": 2,
+    "result_rows": 1
+  },
+  "poison_dlq": {
+    "attempts": 3,
+    "body_and_id_retained": true
+  },
+  "accepted_tasks_completed": 3
+}
