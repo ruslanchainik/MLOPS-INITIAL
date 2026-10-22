@@ -5,7 +5,7 @@ description = ""
 authors = [
     {name = "Ruslan Zhemlikhanov",email = "ruslan@milayasobachka.ru"}
 ]
-requires-python = ">=3.14"
+requires-python = ">=3.14,<4.0"
 dependencies = [
 ]
 
@@ -25,7 +25,9 @@ web = [
     "greenlet (>=3.5.6,<4.0.0)",
     "mlflow (>=3.16,<3.17)",
     "pandas (>=3.0.6,<4.0.0)",
-    "scikit-learn (>=1.8,<2.0)"
+    "scikit-learn (>=1.8,<2.0)",
+    "aio-pika (>=9.5,<10)",
+    "pamqp (>=3.3,<4)"
 ]
 dev = [
     "pre-commit (>=4.6.2,<5.0.0)",
@@ -34,7 +36,8 @@ dev = [
     "pytest (>=9.1.1,<10.0.0)",
     "pytest-asyncio (>=1.4.0,<2.0.0)",
     "httpx (>=0.28.1,<0.29.0)",
-    "pytest-cov (>=7.0.0,<8.0.0)"
+    "pytest-cov (>=7.0.0,<8.0.0)",
+    "testcontainers[rabbitmq] (>=4,<5)"
 ]
 ml = [
     "matplotlib (>=3.11.2,<4.0.0)"
@@ -75,7 +78,7 @@ indent-style = "space"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-ra"
-markers = ["integration: checks the running application and real PostgreSQL"]
+markers = ["integration: real RabbitMQ/Testcontainers or running application/PostgreSQL checks"]
 
 [tool.coverage.run]
 source = ["src/mlops"]

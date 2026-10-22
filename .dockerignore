@@ -13,3 +13,7 @@ coverage.xml
 .env.*
 *.log
 data/
+.idea/
+.DS_Store
+metrics/
+*.sqlite3*
