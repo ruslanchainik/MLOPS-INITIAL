@@ -14,11 +14,15 @@ from aio_pika.exceptions import AMQPError
 from faststream import AckPolicy
 from faststream.asgi import AsgiFastStream, make_ping_asgi
 from faststream.rabbit import Channel, RabbitBroker, RabbitMessage, RabbitQueue
+from faststream.rabbit.opentelemetry import RabbitTelemetryMiddleware
 from faststream.rabbit.schemas import QueueType
+from opentelemetry import propagate, trace
 from pamqp.commands import Basic
 from sqlalchemy.dialects.postgresql import insert
 
 from mlops.config import Settings
+from mlops.core import telemetry
+from mlops.core.logging import configure_logging, task_id
 from mlops.db import task_results
 from mlops.db.session import create_db_engine
 from mlops.messaging import TaskMessage
@@ -27,9 +31,14 @@ from mlops.producer.metrics import peak_rss_mb
 from mlops.producer.publisher import PublishUncertain, QueueConfig, retry_delay
 
 settings = Settings()
+configure_logging()
+telemetry.configure_telemetry("mlops-worker")
 queue = QueueConfig(settings.queue_name, settings.queue_max_length or None)
 broker = RabbitBroker(
     settings.rabbitmq_url,
+    logger=logging.getLogger("mlops.broker"),
+    log_level=logging.getLogger().level,
+    middlewares=[RabbitTelemetryMiddleware()],
     graceful_timeout=settings.inference_delay_seconds + 30,
     default_channel=Channel(
         prefetch_count=settings.prefetch_count, publisher_confirms=True, on_return_raises=True
@@ -47,6 +56,14 @@ async def lifespan():
     handle = None
     try:
         loaded = await asyncio.to_thread(load_registered_model, settings)
+        logger.info(
+            "worker_started",
+            extra={
+                "model_alias": settings.mlflow_model_alias,
+                "model_version": loaded.version,
+                "prefetch_count": settings.prefetch_count,
+            },
+        )
         await broker.connect()
         await broker.declare_queue(RabbitQueue(queue.name + ".dlq", durable=True))
         await broker.declare_queue(
@@ -85,11 +102,17 @@ async def lifespan():
             handle.close()
         writer = None
         await engine.dispose()
+        logger.info("shutdown_completed")
 
 
 app = AsgiFastStream(
     broker, lifespan=lifespan, asgi_routes=[("/health", make_ping_asgi(broker, timeout=1))]
 )
+
+
+@app.on_shutdown
+async def stopping():
+    logger.info("shutdown_started")
 
 
 @app.after_startup
@@ -106,45 +129,106 @@ async def ready():
     decoder=lambda message: message.body,
 )
 async def handle_task(body: bytes, message: RabbitMessage) -> None:
+    token = task_id.set(message.message_id)
+    attempt = message.headers.get("attempt", 0)
+    delivery_attempt = attempt + 1 if isinstance(attempt, int) and attempt >= 0 else 3
+    span = trace.get_current_span()
+    span.set_attribute("task.id", message.message_id or "unknown")
+    span.set_attribute("messaging.delivery.attempt", delivery_attempt)
+    telemetry.in_flight.add(1)
+    if attempt or getattr(message.raw_message, "redelivered", False):
+        telemetry.redeliveries.add(1)
+    try:
+        age = telemetry.message_age(message.headers, "published_at_epoch")
+        if age is not None:
+            now = time.time_ns()
+            start_ns = max(0, now - int(age * 1e9))
+            waiting = telemetry.tracer.start_span(
+                "queue.wait",
+                context=propagate.extract(message.headers),
+                start_time=start_ns,
+                attributes={"task.id": message.message_id or "unknown"},
+            )
+            waiting.end(end_time=now)
+        logger.info("task_received", extra={"attempt": delivery_attempt})
+        await _handle_task(body, message)
+    finally:
+        telemetry.in_flight.add(-1)
+        task_id.reset(token)
+
+
+async def _handle_task(body: bytes, message: RabbitMessage) -> None:
     attempt = message.headers.get("attempt", 0)
     attempt = attempt if isinstance(attempt, int) and attempt >= 0 else 2
     try:
         task = TaskMessage(**json.loads(body))
         start = time.monotonic()
-        await asyncio.sleep(settings.inference_delay_seconds)
-        prediction = single_binary_prediction(
-            await asyncio.to_thread(loaded.model.predict, pd.DataFrame({"text": [task.text]}))
-        )
-        duration = time.monotonic() - start
-        async with engine.begin() as connection:
-            saved = await connection.scalar(
-                insert(task_results)
-                .values(
-                    task_id=task.task_id,
-                    text=task.text,
-                    prediction=prediction,
-                    model_name=loaded.name,
-                    model_version=loaded.version,
-                    processing_seconds=duration,
+        try:
+            with telemetry.tracer.start_as_current_span(
+                "inference",
+                attributes={
+                    "model.alias": settings.mlflow_model_alias,
+                    "model.version": loaded.version,
+                    "messaging.delivery.attempt": attempt + 1,
+                },
+            ):
+                await asyncio.sleep(settings.inference_delay_seconds)
+                # to_thread copies the current contextvars, including the active OTel span.
+                prediction = single_binary_prediction(
+                    await asyncio.to_thread(
+                        loaded.model.predict, pd.DataFrame({"text": [task.text]})
+                    )
                 )
-                .on_conflict_do_nothing(index_elements=["task_id"])
-                .returning(task_results.c.task_id)
-            )
+        finally:
+            duration = time.monotonic() - start
+            telemetry.inference_duration.record(duration)
+        with telemetry.tracer.start_as_current_span("db.save_result"):
+            async with engine.begin() as connection:
+                saved = await connection.scalar(
+                    insert(task_results)
+                    .values(
+                        task_id=task.task_id,
+                        text=task.text,
+                        prediction=prediction,
+                        model_name=loaded.name,
+                        model_version=loaded.version,
+                        processing_seconds=duration,
+                    )
+                    .on_conflict_do_nothing(index_elements=["task_id"])
+                    .returning(task_results.c.task_id)
+                )
     except Exception as error:
+        telemetry.record_error(error)
+        telemetry.processed.add(1, {"result": "error"})
+        logger.exception("task_failed", extra={"attempt": attempt + 1})
         target = queue.name + (".retry" if attempt < 2 else ".dlq")
         await transfer_failed_task(body, message, target, attempt + 1)
+        if attempt >= 2:
+            telemetry.processed.add(1, {"result": "dlq"})
         logger.warning(
-            "Task failed attempt=%s target=%s error=%s", attempt + 1, target, type(error).__name__
+            "task_dlq" if attempt >= 2 else "task_retry",
+            extra={"attempt": attempt + 1, "target": target},
         )
     else:
+        telemetry.processed.add(1, {"result": "ok" if saved else "duplicate"})
+        age = telemetry.message_age(message.headers, "created_at_epoch")
+        if age is not None:
+            telemetry.task_duration.record(age)
+        logger.info(
+            "task_completed",
+            extra={
+                "model_version": loaded.version,
+                "duration_seconds": duration,
+                "duplicate": not bool(saved),
+            },
+        )
         if saved and writer:
-            created = message.headers.get("created_at_epoch")
             writer.writerow(
                 [
                     datetime.now(UTC).isoformat(),
                     os.getpid(),
                     task.task_id,
-                    max(0, time.time() - float(created)) if created else "",
+                    age if age is not None else "",
                     duration,
                     peak_rss_mb(),
                 ]
@@ -162,6 +246,7 @@ async def transfer_failed_task(
     so shutdown can close the channel and return the unacked delivery to RabbitMQ.
     """
     failures = 0
+    headers = {**message.headers, "attempt": attempt, "published_at_epoch": repr(time.time())}
     while True:
         try:
             async with asyncio.timeout(3):
@@ -172,7 +257,7 @@ async def transfer_failed_task(
                     timeout=3,
                     content_type="application/json",
                     message_id=message.message_id,
-                    headers={**message.headers, "attempt": attempt},
+                    headers=headers,
                 )
             if not isinstance(confirmation, Basic.Ack):
                 raise PublishUncertain(f"Retry/DLQ publication not confirmed: {target}")

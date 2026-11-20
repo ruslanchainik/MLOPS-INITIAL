@@ -40,6 +40,18 @@ async def test_handler_predicts_in_thread_and_commits(runtime):
     transaction.__aexit__.assert_awaited_once_with(None, None, None)
 
 
+@pytest.mark.parametrize("value", ["invalid", "nan", {"bad": "header"}])
+async def test_invalid_telemetry_metadata_does_not_break_processing(runtime, value):
+    task = TaskMessage.new("test")
+    async with TestRabbitBroker(worker.broker) as broker:
+        await broker.publish(
+            task.to_bytes(),
+            worker.queue.name,
+            headers={"created_at_epoch": value, "published_at_epoch": value},
+        )
+    runtime[1].scalar.assert_awaited_once()
+
+
 @pytest.mark.parametrize("attempt,target", [(0, ".retry"), (1, ".retry"), (2, ".dlq")])
 async def test_poison_message_has_bounded_redeliveries(runtime, monkeypatch, attempt, target):
     async with TestRabbitBroker(worker.broker) as broker:

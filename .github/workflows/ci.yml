@@ -68,6 +68,11 @@ jobs:
       - name: Check formatting
         run: poetry run ruff format --check .
 
+      - name: Validate Compose profiles
+        run: |
+          docker compose --env-file .env.example config --quiet
+          docker compose --env-file .env.example --profile observability config --quiet
+
       - name: Start isolated MLflow
         run: |
           poetry run mlflow server \

@@ -12,11 +12,12 @@ RUN pip install --no-cache-dir poetry==2.4.3
 COPY pyproject.toml poetry.lock ./
 RUN poetry --no-cache install --only main,web --no-root --no-interaction --no-ansi
 
-RUN useradd --create-home --uid 10001 app
+RUN useradd --create-home --uid 10001 app \
+    && mkdir -p /var/lib/mlops && chown app:app /var/lib/mlops
 COPY src/ ./src/
 RUN poetry install --only-root --no-interaction --no-ansi
 
 USER app
 EXPOSE 8000
 
-CMD ["python", "-m", "uvicorn", "mlops.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "mlops.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

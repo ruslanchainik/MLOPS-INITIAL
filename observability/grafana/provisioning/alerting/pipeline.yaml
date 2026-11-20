@@ -1,0 +1,101 @@
+apiVersion: 1
+groups:
+- orgId: 1
+  name: pipeline
+  folder: MLOps
+  interval: 10s
+  rules:
+  - uid: queue-full
+    title: Queue above 90%
+    condition: B
+    for: 1m
+    noDataState: OK
+    execErrState: Error
+    annotations:
+      summary: Queue above 90%
+      description: 90% leaves little burst capacity; one minute ignores brief bursts.
+    labels:
+      severity: warning
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 60
+        to: 0
+      model:
+        refId: A
+        expr: max by (queue) (rabbitmq_queue_messages_ready{queue="inference_tasks"})
+          / on (queue) max by (queue) (mlops_queue_capacity{queue="inference_tasks"})
+        instant: true
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: B
+      datasourceUid: __expr__
+      relativeTimeRange:
+        from: 0
+        to: 0
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.9
+          operator:
+            type: and
+          reducer:
+            type: last
+            params: []
+          type: query
+          query:
+            params:
+            - B
+  - uid: dead-letters
+    title: Tasks in DLQ
+    condition: B
+    for: 10s
+    noDataState: OK
+    execErrState: Error
+    annotations:
+      summary: Tasks in DLQ
+      description: Any undeliverable task needs investigation; 10s ignores a one-scrape
+        transient.
+    labels:
+      severity: warning
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 60
+        to: 0
+      model:
+        refId: A
+        expr: sum(rabbitmq_queue_messages{queue="inference_tasks.dlq"})
+        instant: true
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: B
+      datasourceUid: __expr__
+      relativeTimeRange:
+        from: 0
+        to: 0
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          reducer:
+            type: last
+            params: []
+          type: query
+          query:
+            params:
+            - B
