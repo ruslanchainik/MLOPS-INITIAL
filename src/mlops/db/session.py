@@ -17,7 +17,9 @@ def create_db_engine() -> AsyncEngine:
         username=os.environ["POSTGRES_USER"],
         password=os.environ["POSTGRES_PASSWORD"],
     )
-    return create_async_engine(url, pool_pre_ping=True, connect_args={"timeout": 3})
+    return create_async_engine(
+        url, pool_pre_ping=True, hide_parameters=True, connect_args={"timeout": 3}
+    )
 
 
 async def initialize_database(engine: AsyncEngine) -> None:

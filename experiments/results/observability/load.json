@@ -1,0 +1,1034 @@
+{
+  "timestamp": "2026-11-20T19:47:08.149891+00:00",
+  "count": 6000,
+  "queue_limit": 20,
+  "inference_delay_seconds": 0.05,
+  "conditions": "No pytest or model training during steady-state windows. Comparison uses the last three samples of each stage; API warm-up checks are excluded.",
+  "samples": [
+    {
+      "stage": "one_worker",
+      "seconds": 0.1,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204028.44,
+            "20"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204028.504,
+            "14.841781013721647"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204028.536,
+            "14.361723406808817"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "one_worker",
+      "seconds": 5.5,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204033.677,
+            "19"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204033.737,
+            "12.48"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204033.767,
+            "12.720000000000002"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "one_worker",
+      "seconds": 10.7,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204038.854,
+            "19"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204038.889,
+            "12.161459375125016"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204038.92,
+            "12.201464175701085"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "one_worker",
+      "seconds": 15.8,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204043.995,
+            "19"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204044.021,
+            "11.641396967636117"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204044.046,
+            "11.161339360723288"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "one_worker",
+      "seconds": 20.9,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204049.164,
+            "20"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204049.215,
+            "11.92"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204049.249,
+            "12"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "one_worker",
+      "seconds": 26.2,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204054.379,
+            "20"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204054.44,
+            "13.280000000000001"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204054.472,
+            "12.8"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "one_worker",
+      "seconds": 31.4,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204059.552,
+            "19"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204059.576,
+            "13.277875539913614"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204059.608,
+            "12.877939529675253"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "one_worker",
+      "seconds": 36.5,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204064.695,
+            "20"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204064.722,
+            "13.599456021759131"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204064.743,
+            "13.359465621375145"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "one_worker",
+      "seconds": 41.6,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204069.809,
+            "20"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204069.832,
+            "14.08"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204069.85,
+            "14.36"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "one_worker",
+      "seconds": 46.7,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204074.938,
+            "19"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204074.968,
+            "14.48"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204074.995,
+            "14.8"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "one_worker",
+      "seconds": 51.9,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204080.093,
+            "20"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204080.124,
+            "14.756458449972007"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204080.146,
+            "14.916420059185794"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "one_worker",
+      "seconds": 57.0,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204085.241,
+            "19"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204085.282,
+            "15.002400384061449"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204085.323,
+            "15.12241958713394"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "one_worker",
+      "seconds": 62.2,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204090.415,
+            "20"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204090.433,
+            "14.15773476243801"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204090.448,
+            "14.037753959366501"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "two_workers",
+      "seconds": 97.8,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204126.084,
+            "19"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204126.12,
+            "11.082659838361206"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204126.158,
+            "9.7223333600064"
+          ]
+        },
+        {
+          "metric": {
+            "service_instance_id": "94f37deb-f1ba-4994-b7e3-df37acf8afdd"
+          },
+          "value": [
+            1795204126.158,
+            "1.00875175035007"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "two_workers",
+      "seconds": 103.1,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204131.258,
+            "20"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204131.291,
+            "13.08261652330466"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204131.31,
+            "9.441888377675534"
+          ]
+        },
+        {
+          "metric": {
+            "service_instance_id": "94f37deb-f1ba-4994-b7e3-df37acf8afdd"
+          },
+          "value": [
+            1795204131.31,
+            "3.758392494083925"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "two_workers",
+      "seconds": 108.2,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204136.374,
+            "20"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204136.399,
+            "15.924458848477572"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204136.418,
+            "9.162565518345138"
+          ]
+        },
+        {
+          "metric": {
+            "service_instance_id": "94f37deb-f1ba-4994-b7e3-df37acf8afdd"
+          },
+          "value": [
+            1795204136.418,
+            "5.987490277129586"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "two_workers",
+      "seconds": 113.3,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204141.476,
+            "19"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204141.504,
+            "19.725523146481017"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204141.521,
+            "10.482935221862121"
+          ]
+        },
+        {
+          "metric": {
+            "service_instance_id": "94f37deb-f1ba-4994-b7e3-df37acf8afdd"
+          },
+          "value": [
+            1795204141.521,
+            "8.551134223377835"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "two_workers",
+      "seconds": 118.4,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204146.637,
+            "20"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204146.814,
+            "23.12"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204146.874,
+            "11.52"
+          ]
+        },
+        {
+          "metric": {
+            "service_instance_id": "94f37deb-f1ba-4994-b7e3-df37acf8afdd"
+          },
+          "value": [
+            1795204146.874,
+            "11.350357333333333"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "two_workers",
+      "seconds": 123.8,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204152.028,
+            "20"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204152.05,
+            "26.1568611766588"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204152.067,
+            "13.278406591209055"
+          ]
+        },
+        {
+          "metric": {
+            "service_instance_id": "94f37deb-f1ba-4994-b7e3-df37acf8afdd"
+          },
+          "value": [
+            1795204152.067,
+            "13.11842578890533"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "two_workers",
+      "seconds": 129.0,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204157.123,
+            "20"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204157.147,
+            "26.038958441662334"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204157.164,
+            "13.079476820927164"
+          ]
+        },
+        {
+          "metric": {
+            "service_instance_id": "94f37deb-f1ba-4994-b7e3-df37acf8afdd"
+          },
+          "value": [
+            1795204157.164,
+            "13.559457621695133"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "two_workers",
+      "seconds": 134.0,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204162.219,
+            "20"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204162.242,
+            "26.836779586449627"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204162.259,
+            "13.558372995240571"
+          ]
+        },
+        {
+          "metric": {
+            "service_instance_id": "94f37deb-f1ba-4994-b7e3-df37acf8afdd"
+          },
+          "value": [
+            1795204162.259,
+            "13.99832020157581"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "two_workers",
+      "seconds": 139.1,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204167.327,
+            "20"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204167.351,
+            "27.116745990481142"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204167.369,
+            "13.678358596968364"
+          ]
+        },
+        {
+          "metric": {
+            "service_instance_id": "94f37deb-f1ba-4994-b7e3-df37acf8afdd"
+          },
+          "value": [
+            1795204167.369,
+            "14.158301003879535"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    },
+    {
+      "stage": "two_workers",
+      "seconds": 144.3,
+      "queue_ready": [
+        {
+          "metric": {},
+          "value": [
+            1795204172.445,
+            "20"
+          ]
+        }
+      ],
+      "source_per_second": [
+        {
+          "metric": {},
+          "value": [
+            1795204172.473,
+            "26.9578433725302"
+          ]
+        }
+      ],
+      "worker_per_second": [
+        {
+          "metric": {
+            "service_instance_id": "2ac67b04-d3f7-4df2-a24d-fb166602ec28"
+          },
+          "value": [
+            1795204172.502,
+            "13.638908887289016"
+          ]
+        },
+        {
+          "metric": {
+            "service_instance_id": "94f37deb-f1ba-4994-b7e3-df37acf8afdd"
+          },
+          "value": [
+            1795204172.502,
+            "14.038876889848812"
+          ]
+        }
+      ],
+      "alerts": {
+        "Queue above 90%": "firing",
+        "Tasks in DLQ": "firing"
+      }
+    }
+  ],
+  "queue_alert_firing": true,
+  "docker_stats_under_load": [
+    {
+      "BlockIO": "4.69GB / 139MB",
+      "CPUPerc": "5.16%",
+      "Container": "4627e9e306f6479f9a4913eb9f4dcd53409f18dc043ff99bfdaafcc9ea94929b",
+      "ID": "4627e9e306f6",
+      "MemPerc": "49.13%",
+      "MemUsage": "94.33MiB / 192MiB",
+      "Name": "mlops-initial-alloy-1",
+      "NetIO": "75.9kB / 2.47MB",
+      "PIDs": "13"
+    },
+    {
+      "BlockIO": "2GB / 136MB",
+      "CPUPerc": "4.83%",
+      "Container": "904b919f8367078033eda3a0eb5293003f6960b248004da92bb4f69a7af433a4",
+      "ID": "904b919f8367",
+      "MemPerc": "52.74%",
+      "MemUsage": "135MiB / 256MiB",
+      "Name": "mlops-initial-grafana-1",
+      "NetIO": "164kB / 301kB",
+      "PIDs": "19"
+    },
+    {
+      "BlockIO": "113MB / 13.7MB",
+      "CPUPerc": "3.14%",
+      "Container": "51c5d34cb7fd642ab1b55b0ff66a0582802f57f216e2411a05b1bf7438558505",
+      "ID": "51c5d34cb7fd",
+      "MemPerc": "42.87%",
+      "MemUsage": "109.7MiB / 256MiB",
+      "Name": "mlops-initial-loki-1",
+      "NetIO": "2.48MB / 85.2kB",
+      "PIDs": "15"
+    },
+    {
+      "BlockIO": "661MB / 8.45MB",
+      "CPUPerc": "0.86%",
+      "Container": "de602fbbf881c0b37c01d964b800ac15176174cb390d3865ead9f7967970073f",
+      "ID": "de602fbbf881",
+      "MemPerc": "64.16%",
+      "MemUsage": "123.2MiB / 192MiB",
+      "Name": "mlops-initial-otel-collector-1",
+      "NetIO": "37MB / 4.35MB",
+      "PIDs": "14"
+    },
+    {
+      "BlockIO": "125MB / 6.22MB",
+      "CPUPerc": "1.48%",
+      "Container": "103a89a1e926a0ac02c72002293f2c14b34b49fe50aeeaa611f2ff08b16aa810",
+      "ID": "103a89a1e926",
+      "MemPerc": "58.45%",
+      "MemUsage": "112.2MiB / 192MiB",
+      "Name": "mlops-initial-prometheus-1",
+      "NetIO": "2.99MB / 267kB",
+      "PIDs": "14"
+    },
+    {
+      "BlockIO": "93.7MB / 57.2MB",
+      "CPUPerc": "5.54%",
+      "Container": "7c6f676fd9a7384f6076f40a09c6957b2cc203ce3132c277cdb04dac9ed26e3b",
+      "ID": "7c6f676fd9a7",
+      "MemPerc": "37.44%",
+      "MemUsage": "119.8MiB / 320MiB",
+      "Name": "mlops-initial-tempo-1",
+      "NetIO": "2.98MB / 101kB",
+      "PIDs": "14"
+    }
+  ],
+  "summary": {
+    "one_worker": {
+      "source_per_second": 14.64,
+      "worker_per_second": 14.69,
+      "active_workers": 1
+    },
+    "two_workers": {
+      "source_per_second": 26.97,
+      "worker_per_second": 27.69,
+      "active_workers": 2
+    },
+    "worker_speedup": 1.88,
+    "max_ready": 20.0,
+    "observability_memory_mib": 694.23
+  }
+}

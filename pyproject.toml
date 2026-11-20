@@ -28,7 +28,13 @@ web = [
     "scikit-learn (>=1.8,<2.0)",
     "aio-pika (>=9.5,<10)",
     "pamqp (>=3.3,<4)",
-    "faststream[rabbit] (>=0.6,<0.8)"
+    "faststream[rabbit] (>=0.6,<0.8)",
+    "opentelemetry-sdk (>=1.39,<2)",
+    "opentelemetry-exporter-otlp-proto-http (>=1.39,<2)",
+    "opentelemetry-instrumentation-fastapi (>=0.60b0,<1)",
+    "python-json-logger (>=3.3,<5)",
+    "psutil (>=7,<8)",
+    "opentelemetry-instrumentation-system-metrics (>=0.60b0,<1)"
 ]
 dev = [
     "pre-commit (>=4.6.2,<5.0.0)",

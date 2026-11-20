@@ -27,7 +27,7 @@ async def check_postgres(db: AsyncSession) -> dict:
         elapsed = time.perf_counter() - start
         response_time_ms = round(elapsed * 1000, 2)
 
-        logger.info(
+        logger.debug(
             "PostgreSQL health check passed response_time_ms=%s",
             response_time_ms,
         )

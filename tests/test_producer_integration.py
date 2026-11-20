@@ -148,7 +148,7 @@ def test_worker_resumes_after_handoff_route_is_restored(broker, attempt, suffix)
             await worker.broker.start()
             connection = await aio_pika.connect(os.environ['RABBITMQ_URL'])
             try:
-                channel = await connection.channel()
+                channel = await connection.channel(publisher_confirms=True, on_return_raises=True)
                 target = worker.queue.name + os.environ['HANDOFF_SUFFIX']
                 attempt = int(os.environ['HANDOFF_ATTEMPT'])
                 publish = worker.broker.publish
@@ -162,18 +162,22 @@ def test_worker_resumes_after_handoff_route_is_restored(broker, attempt, suffix)
                         raise
 
                 worker.broker.publish = observe_handoff
-                await worker.broker.publish(
-                    b'first invalid json', queue=worker.queue.name,
-                    message_id='first', headers={'attempt': attempt}, persist=True,
-                )
+                # The source uses a separate channel, as in the real pipeline.
+                # Concurrent copies of one message_id on one publish channel race
+                # aiormq's publisher-confirm bookkeeping.
+                async def submit(body, message_id):
+                    await channel.default_exchange.publish(
+                        aio_pika.Message(body, message_id=message_id,
+                                         headers={'attempt': attempt},
+                                         delivery_mode=aio_pika.DeliveryMode.PERSISTENT),
+                        routing_key=worker.queue.name, mandatory=True,
+                    )
+                await submit(b'first invalid json', 'first')
                 # No target exists: publication returns NO_ROUTE while the main
                 # delivery must remain unacked and the consumer must stay alive.
                 await asyncio.wait_for(failed_handoff.wait(), timeout=5)
                 destination = await channel.declare_queue(target, durable=True)
-                await worker.broker.publish(
-                    b'second invalid json', queue=worker.queue.name,
-                    message_id='second', headers={'attempt': attempt}, persist=True,
-                )
+                await submit(b'second invalid json', 'second')
                 async with asyncio.timeout(10):
                     for expected in ('first', 'second'):
                         while True:

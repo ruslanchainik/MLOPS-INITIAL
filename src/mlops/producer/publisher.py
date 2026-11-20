@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import math
 import random
 from dataclasses import dataclass
@@ -14,10 +15,16 @@ from aio_pika.exceptions import (
     DeliveryError,
     PublishError,
 )
+from opentelemetry import propagate
+from opentelemetry.trace import SpanKind
 from pamqp.commands import Basic
 
+from mlops.core import telemetry
+from mlops.core.logging import task_id
 from mlops.messaging import TaskMessage
 from mlops.producer.outbox import PendingTask, SQLiteOutbox
+
+logger = logging.getLogger(__name__)
 
 
 class QueueOverloaded(Exception):
@@ -129,16 +136,39 @@ class RabbitPublisher:
     async def publish_once(
         self, task: TaskMessage, *, created_at_epoch: float | None = None
     ) -> None:
+        token = task_id.set(task.task_id)
+        try:
+            with telemetry.tracer.start_as_current_span(
+                "publish",
+                kind=SpanKind.PRODUCER,
+                attributes={
+                    "messaging.system": "rabbitmq",
+                    "messaging.destination.name": self.queue.name,
+                    "task.id": task.task_id,
+                },
+            ):
+                await self._publish_once(task, created_at_epoch=created_at_epoch)
+                logger.debug("task_published")
+        finally:
+            task_id.reset(token)
+
+    async def _publish_once(
+        self, task: TaskMessage, *, created_at_epoch: float | None = None
+    ) -> None:
         if self._channel is None:
             raise RuntimeError("Publisher is not connected")
+        headers = {
+            "created_at_epoch": repr(created_at_epoch if created_at_epoch is not None else time())
+        }
+        headers["published_at_epoch"] = repr(time())
+        propagate.inject(headers)
         message = aio_pika.Message(
             body=task.to_bytes(),
             content_type="application/json",
             delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
             message_id=task.task_id,
-            headers={"created_at_epoch": repr(created_at_epoch)}
-            if created_at_epoch is not None
-            else {},
+            correlation_id=task.task_id,
+            headers=headers,
         )
         try:
             async with asyncio.timeout(self.confirm_timeout):
@@ -210,17 +240,22 @@ async def publish_test_tasks(
                         break
                     if is_new:
                         stats.generated += 1
+                        telemetry.generated.add(1)
                     await _publish_with_backpressure(
                         publisher, pending, stats, max_wait_seconds=max_wait_seconds
                     )
                     outbox.mark_confirmed(batch_id, pending.message.task_id)
                     stats.published += 1
+                    telemetry.published.add(1)
                     stats.publish_latency_sum_seconds += max(0.0, time() - pending.created_at_epoch)
                     if pending.sequence % progress_every == 0 or pending.sequence == count:
-                        print(
-                            f"Confirmed {pending.sequence}/{count}; "
-                            f"broker rejections={stats.rejected}",
-                            flush=True,
+                        logger.info(
+                            "batch_progress",
+                            extra={
+                                "confirmed": pending.sequence,
+                                "total": count,
+                                "rejected": stats.rejected,
+                            },
                         )
     finally:
         stats.elapsed_seconds = perf_counter() - started
@@ -228,6 +263,23 @@ async def publish_test_tasks(
 
 
 async def _publish_with_backpressure(
+    publisher: RabbitPublisher,
+    pending: PendingTask,
+    stats: PublishStats,
+    *,
+    max_wait_seconds: float,
+) -> None:
+    token = task_id.set(pending.message.task_id)
+    try:
+        with telemetry.tracer.start_as_current_span(
+            "source.task", attributes={"task.id": pending.message.task_id}
+        ):
+            await _retry_publication(publisher, pending, stats, max_wait_seconds=max_wait_seconds)
+    finally:
+        task_id.reset(token)
+
+
+async def _retry_publication(
     publisher: RabbitPublisher,
     pending: PendingTask,
     stats: PublishStats,
@@ -246,11 +298,21 @@ async def _publish_with_backpressure(
         except (QueueOverloaded, PublishUncertain, TimeoutError) as exc:
             if isinstance(exc, QueueOverloaded):
                 stats.rejected += 1
+                telemetry.rejected.add(1)
             stats.retries += 1
             attempts += 1
             remaining = deadline - monotonic()
             if remaining > 0:
-                await asyncio.sleep(min(retry_delay(attempts), remaining))
+                delay = min(retry_delay(attempts), remaining)
+                logger.warning(
+                    "source_backpressure", extra={"attempt": attempts, "wait_seconds": delay}
+                )
+                with telemetry.tracer.start_as_current_span(
+                    "source.wait", attributes={"retry.attempt": attempts}
+                ):
+                    started = monotonic()
+                    await asyncio.sleep(delay)
+                    telemetry.wait_time.add(max(0, monotonic() - started))
             if monotonic() >= deadline:
                 raise TimeoutError(
                     f"Broker did not accept task {pending.message.task_id} "
